@@ -6,8 +6,6 @@ matching the MCP tool response schema.
 
 from __future__ import annotations
 
-import httpx
-
 from signalk_mcp.client import SignalKClient
 
 
@@ -27,11 +25,7 @@ async def get_route(client: SignalKClient) -> dict:
     if not href:
         raise ValueError("No active route set on SignalK")
 
-    route_url = client.base_url + "/signalk/v1/api" + href
-    async with httpx.AsyncClient(timeout=5.0) as http:
-        resp = await http.get(route_url)
-        resp.raise_for_status()
-        route = resp.json()
+    route = await client.get_resource(href)
 
     coords = (
         route.get("feature", {})

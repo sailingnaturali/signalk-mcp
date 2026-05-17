@@ -27,7 +27,7 @@ Set environment variables or pass on CLI:
 
 ```bash
 export SIGNALK_URL=http://naturali-signalk.local:3000
-signalk-mcp serve
+signalk-mcp
 ```
 
 ## License

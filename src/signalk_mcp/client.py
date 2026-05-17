@@ -23,5 +23,12 @@ class SignalKClient:
         resp.raise_for_status()
         return resp.json()
 
+    async def get_resource(self, href: str) -> dict:
+        """Fetch a resource by its SignalK API href (e.g. ``/resources/routes/r-1``)."""
+        url = f"{self.base_url}/signalk/v1/api{href}"
+        resp = await self._http.get(url)
+        resp.raise_for_status()
+        return resp.json()
+
     async def aclose(self) -> None:
         await self._http.aclose()
