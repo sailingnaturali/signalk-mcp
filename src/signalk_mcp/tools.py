@@ -6,7 +6,58 @@ matching the MCP tool response schema.
 
 from __future__ import annotations
 
+import math
+
 from signalk_mcp.client import SignalKClient
+
+
+def _convert(path: str, value: object) -> tuple[str | None, str | None]:
+    """Return (display_string, unit) for a known SignalK path, else (None, None).
+
+    SignalK always stores values in SI units:
+      - speeds in m/s → knots
+      - angles/headings/courses in radians → degrees
+      - pressure in Pa → hPa
+      - temperature in K → °C
+      - depth in m → m (no conversion, kept for completeness)
+    """
+    if not isinstance(value, (int, float)):
+        return None, None
+
+    tail = path.rsplit(".", 1)[-1]
+
+    # Speed: m/s → knots
+    _speed_keys = {"speedTrue", "speedOverGround", "speedThroughWater", "speedApparent"}
+    if tail in _speed_keys:
+        kts = value * 1.94384
+        return f"{kts:.1f} kts", "kts"
+
+    # Angles, headings, courses: radians → degrees
+    _angle_keys = {
+        "angleTrueWater", "angleApparentWater",
+        "headingTrue", "headingMagnetic",
+        "courseOverGroundTrue", "courseOverGroundMagnetic",
+        "magneticVariation",
+    }
+    if tail in _angle_keys:
+        deg = math.degrees(value) % 360
+        return f"{deg:.1f}°T", "°T"
+
+    # Pressure: Pa → hPa
+    if tail == "pressure":
+        hpa = value / 100.0
+        return f"{hpa:.1f} hPa", "hPa"
+
+    # Temperature: K → °C
+    if tail == "temperature":
+        celsius = value - 273.15
+        return f"{celsius:.1f}°C", "°C"
+
+    # Depth: already metres
+    if tail in {"belowKeel", "belowSurface", "belowTransducer"}:
+        return f"{value:.1f} m", "m"
+
+    return None, None
 
 
 async def get_route(client: SignalKClient) -> dict:
@@ -74,11 +125,16 @@ async def read_sensor(client: SignalKClient, path: str) -> dict:
         path: SignalK dotted path (e.g. ``environment.wind.speedTrue``).
 
     Returns:
-        Dict with keys ``path``, ``value``, ``timestamp``.
+        Dict with keys ``path``, ``value`` (raw SI), ``display`` (human-readable
+        with units, or None), ``unit`` (unit string, or None), ``timestamp``.
     """
     raw = await client.get_value(path)
+    value = raw.get("value")
+    display, unit = _convert(path, value)
     return {
         "path": path,
-        "value": raw.get("value"),
+        "value": value,
+        "display": display,
+        "unit": unit,
         "timestamp": raw.get("timestamp"),
     }
