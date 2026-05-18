@@ -11,6 +11,16 @@ import math
 from signalk_mcp.client import SignalKClient
 
 
+def _degrees_to_compass(deg: float) -> str:
+    """Return 16-point compass rose label for a true bearing."""
+    points = [
+        "N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE",
+        "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW",
+    ]
+    idx = round(deg / 22.5) % 16
+    return points[idx]
+
+
 def _convert(path: str, value: object) -> tuple[str | None, str | None]:
     """Return (display_string, unit) for a known SignalK path, else (None, None).
 
@@ -32,16 +42,22 @@ def _convert(path: str, value: object) -> tuple[str | None, str | None]:
         kts = value * 1.94384
         return f"{kts:.1f} kts", "kts"
 
-    # Angles, headings, courses: radians → degrees
-    _angle_keys = {
-        "angleTrueWater", "angleApparentWater",
+    # Angles, headings, courses: radians → degrees + compass label
+    _bearing_keys = {
         "headingTrue", "headingMagnetic",
         "courseOverGroundTrue", "courseOverGroundMagnetic",
-        "magneticVariation",
     }
-    if tail in _angle_keys:
+    _wind_angle_keys = {"angleTrueWater", "angleApparentWater"}
+    if tail in _bearing_keys:
         deg = math.degrees(value) % 360
-        return f"{deg:.1f}°T", "°T"
+        return f"{deg:.1f}°T ({_degrees_to_compass(deg)})", "°T"
+    if tail in _wind_angle_keys:
+        deg = math.degrees(value) % 360
+        compass = _degrees_to_compass(deg)
+        return f"{deg:.1f}°T ({compass} wind)", "°T"
+    if tail == "magneticVariation":
+        deg = math.degrees(value)
+        return f"{deg:.1f}°", "°"
 
     # Pressure: Pa → hPa
     if tail == "pressure":
