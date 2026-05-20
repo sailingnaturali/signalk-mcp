@@ -7,8 +7,14 @@ matching the MCP tool response schema.
 from __future__ import annotations
 
 import math
+import zoneinfo
+from datetime import datetime, timezone
+
+from timezonefinder import TimezoneFinder
 
 from signalk_mcp.client import SignalKClient
+
+_tf = TimezoneFinder()
 
 
 def _degrees_to_compass(deg: float) -> str:
@@ -76,6 +82,47 @@ def _convert(path: str, value: object) -> tuple[str | None, str | None]:
         return f"{value:.1f} m", "m"
 
     return None, None
+
+
+async def get_local_time(client: SignalKClient) -> dict:
+    """Return current time localized to the vessel's GPS position.
+
+    Args:
+        client: An open SignalKClient.
+
+    Returns:
+        Dict with keys ``utc`` (ISO string), ``local`` (ISO string),
+        ``timezone`` (IANA name), ``display`` (e.g. ``"11:54 PDT"``).
+        Falls back to UTC if position is unavailable.
+    """
+    now_utc = datetime.now(timezone.utc)
+
+    try:
+        pos_raw = await client.get_value("navigation.position")
+        pos = pos_raw.get("value") or {}
+        lat = pos.get("latitude")
+        lon = pos.get("longitude")
+    except Exception:
+        lat = lon = None
+
+    if lat is not None and lon is not None:
+        tz_name = _tf.timezone_at(lat=lat, lng=lon)
+        if tz_name:
+            tz = zoneinfo.ZoneInfo(tz_name)
+            now_local = now_utc.astimezone(tz)
+            return {
+                "utc": now_utc.isoformat(),
+                "local": now_local.isoformat(),
+                "timezone": tz_name,
+                "display": now_local.strftime("%H:%M %Z"),
+            }
+
+    return {
+        "utc": now_utc.isoformat(),
+        "local": now_utc.isoformat(),
+        "timezone": "UTC",
+        "display": now_utc.strftime("%H:%M UTC"),
+    }
 
 
 async def get_route(client: SignalKClient) -> dict:

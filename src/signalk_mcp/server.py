@@ -15,7 +15,7 @@ from mcp.server import Server
 from mcp.server.stdio import stdio_server
 
 from signalk_mcp.client import SignalKClient
-from signalk_mcp.tools import battery_state, get_route, read_sensor
+from signalk_mcp.tools import battery_state, get_local_time, get_route, read_sensor
 
 
 def build_server() -> Server:
@@ -62,6 +62,11 @@ def build_server() -> Server:
                     },
                 },
             ),
+            types.Tool(
+                name="get_local_time",
+                description="Get current time localized to the vessel's GPS position.",
+                inputSchema={"type": "object", "properties": {}},
+            ),
         ]
 
     @server.call_tool()
@@ -74,6 +79,8 @@ def build_server() -> Server:
                 result = await get_route(client)
             elif name == "battery_state":
                 result = await battery_state(client, bank=args.get("bank", "house"))
+            elif name == "get_local_time":
+                result = await get_local_time(client)
             else:
                 raise ValueError(f"Unknown tool: {name}")
         finally:
