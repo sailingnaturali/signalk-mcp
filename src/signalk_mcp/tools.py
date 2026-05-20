@@ -12,10 +12,12 @@ from signalk_mcp.client import SignalKClient
 
 
 def _degrees_to_compass(deg: float) -> str:
-    """Return 16-point compass rose label for a true bearing."""
+    """Return 16-point compass rose label for a true bearing, spoken form."""
     points = [
-        "N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE",
-        "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW",
+        "North", "North-North-East", "North-East", "East-North-East",
+        "East", "East-South-East", "South-East", "South-South-East",
+        "South", "South-South-West", "South-West", "West-South-West",
+        "West", "West-North-West", "North-West", "North-North-West",
     ]
     idx = round(deg / 22.5) % 16
     return points[idx]
@@ -40,7 +42,7 @@ def _convert(path: str, value: object) -> tuple[str | None, str | None]:
     _speed_keys = {"speedTrue", "speedOverGround", "speedThroughWater", "speedApparent"}
     if tail in _speed_keys:
         kts = value * 1.94384
-        return f"{kts:.1f} kts", "kts"
+        return f"{kts:.1f} knots", "knots"
 
     # Angles, headings, courses: radians → degrees + compass label
     _bearing_keys = {

@@ -20,8 +20,8 @@ async def test_wind_speed_converts_to_knots():
     _mock_sensor("environment.wind.speedTrue", 8.5)
     client = SignalKClient(base_url="http://signalk-test:3000")
     result = await read_sensor(client, "environment.wind.speedTrue")
-    assert result["display"] == "16.5 kts"
-    assert result["unit"] == "kts"
+    assert result["display"] == "16.5 knots"
+    assert result["unit"] == "knots"
 
 
 @respx.mock
@@ -29,8 +29,8 @@ async def test_sog_converts_to_knots():
     _mock_sensor("navigation.speedOverGround", 3.0)
     client = SignalKClient(base_url="http://signalk-test:3000")
     result = await read_sensor(client, "navigation.speedOverGround")
-    assert result["display"] == "5.8 kts"
-    assert result["unit"] == "kts"
+    assert result["display"] == "5.8 knots"
+    assert result["unit"] == "knots"
 
 
 @respx.mock
@@ -38,7 +38,7 @@ async def test_heading_converts_to_degrees_with_compass():
     _mock_sensor("navigation.headingTrue", 2.268)
     client = SignalKClient(base_url="http://signalk-test:3000")
     result = await read_sensor(client, "navigation.headingTrue")
-    assert result["display"] == "129.9°T (SE)"
+    assert result["display"] == "129.9°T (South-East)"
     assert result["unit"] == "°T"
 
 
@@ -47,7 +47,7 @@ async def test_wind_angle_converts_to_degrees_with_compass():
     _mock_sensor("environment.wind.angleTrueWater", 5.498)
     client = SignalKClient(base_url="http://signalk-test:3000")
     result = await read_sensor(client, "environment.wind.angleTrueWater")
-    assert result["display"] == "315.0°T (NW wind)"
+    assert result["display"] == "315.0°T (North-West wind)"
     assert result["unit"] == "°T"
 
 
