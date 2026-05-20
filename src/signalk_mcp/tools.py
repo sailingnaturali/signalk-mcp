@@ -92,7 +92,7 @@ async def get_local_time(client: SignalKClient) -> dict:
 
     Returns:
         Dict with keys ``utc`` (ISO string), ``local`` (ISO string),
-        ``timezone`` (IANA name), ``display`` (e.g. ``"11:54 PDT"``).
+        ``timezone`` (IANA name), ``display`` (e.g. ``"11:54"``).
         Falls back to UTC if position is unavailable.
     """
     now_utc = datetime.now(timezone.utc)
@@ -114,14 +114,14 @@ async def get_local_time(client: SignalKClient) -> dict:
                 "utc": now_utc.isoformat(),
                 "local": now_local.isoformat(),
                 "timezone": tz_name,
-                "display": now_local.strftime("%H:%M %Z"),
+                "display": now_local.strftime("%H:%M"),
             }
 
     return {
         "utc": now_utc.isoformat(),
         "local": now_utc.isoformat(),
         "timezone": "UTC",
-        "display": now_utc.strftime("%H:%M UTC"),
+        "display": now_utc.strftime("%H:%M"),
     }
 
 

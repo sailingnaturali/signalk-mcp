@@ -32,16 +32,14 @@ async def test_local_time_pacific_northwest():
 
 @respx.mock
 async def test_local_time_display_format():
-    """display field should be HH:MM TZABBR (e.g. '11:54 PDT')."""
+    """display field should be HH:MM only (e.g. '11:54')."""
     _mock_position(48.43, -123.37)
     client = SignalKClient(base_url="http://signalk-test:3000")
     result = await get_local_time(client)
 
-    # e.g. "11:54 PDT" or "11:54 PST" depending on time of year
     parts = result["display"].split()
-    assert len(parts) == 2
-    assert ":" in parts[0]   # time part
-    assert len(parts[1]) >= 2  # timezone abbreviation
+    assert len(parts) == 1       # no timezone abbreviation
+    assert ":" in parts[0]       # time part HH:MM
 
 
 @respx.mock
@@ -57,4 +55,4 @@ async def test_local_time_falls_back_to_utc_when_no_position():
     result = await get_local_time(client)
 
     assert result["timezone"] == "UTC"
-    assert "UTC" in result["display"]
+    assert ":" in result["display"]
