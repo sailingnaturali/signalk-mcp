@@ -52,11 +52,11 @@ def _convert(path: str, value: object) -> tuple[str | None, str | None]:
     _wind_angle_keys = {"angleTrueWater", "angleApparentWater"}
     if tail in _bearing_keys:
         deg = math.degrees(value) % 360
-        return f"{deg:.1f}°T ({_degrees_to_compass(deg)})", "°T"
+        return f"{deg:.1f}° ({_degrees_to_compass(deg)})", "°"
     if tail in _wind_angle_keys:
         deg = math.degrees(value) % 360
         compass = _degrees_to_compass(deg)
-        return f"{deg:.1f}°T ({compass} wind)", "°T"
+        return f"{deg:.1f}° ({compass} wind)", "°"
     if tail == "magneticVariation":
         deg = math.degrees(value)
         return f"{deg:.1f}°", "°"
