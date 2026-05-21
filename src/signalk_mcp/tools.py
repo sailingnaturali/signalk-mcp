@@ -46,7 +46,7 @@ def _convert(path: str, value: object) -> tuple[str | None, str | None]:
             return None, None
         lat_dir = "North" if lat >= 0 else "South"
         lon_dir = "East" if lon >= 0 else "West"
-        return f"{abs(lat):.4f}° {lat_dir}, {abs(lon):.4f}° {lon_dir}", "°"
+        return f"{abs(lat):.4f} {lat_dir}, {abs(lon):.4f} {lon_dir}", "°"
 
     if not isinstance(value, (int, float)):
         return None, None
@@ -122,14 +122,14 @@ async def get_local_time(client: SignalKClient) -> dict:
             return {
                 "utc": now_utc.isoformat(),
                 "local": now_local.isoformat(),
-                "timezone": tz_name,
+                "iana_timezone": tz_name,
                 "display": now_local.strftime("%H:%M"),
             }
 
     return {
         "utc": now_utc.isoformat(),
         "local": now_utc.isoformat(),
-        "timezone": "UTC",
+        "iana_timezone": "UTC",
         "display": now_utc.strftime("%H:%M"),
     }
 
@@ -182,9 +182,12 @@ async def battery_state(client: SignalKClient, bank: str = "house") -> dict:
     voltage_obj = raw.get("voltage", {}) or {}
     current_obj = raw.get("current", {}) or {}
 
+    soc = soc_obj.get("value")
+    display = f"{soc * 100:.0f}%" if soc is not None else None
     return {
         "bank": bank,
-        "state_of_charge": soc_obj.get("value"),
+        "state_of_charge": soc,
+        "display": display,
         "voltage": voltage_obj.get("value"),
         "current": current_obj.get("value"),
         "timestamp": soc_obj.get("timestamp") or voltage_obj.get("timestamp"),

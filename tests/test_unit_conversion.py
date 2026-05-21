@@ -102,5 +102,5 @@ async def test_position_formats_with_cardinal_directions():
     ))
     client = SignalKClient(base_url="http://signalk-test:3000")
     result = await read_sensor(client, "navigation.position")
-    assert result["display"] == "48.7600° North, 123.0500° West"
+    assert result["display"] == "48.7600 North, 123.0500 West"
     assert result["unit"] == "°"

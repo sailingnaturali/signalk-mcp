@@ -24,7 +24,7 @@ async def test_local_time_pacific_northwest():
     client = SignalKClient(base_url="http://signalk-test:3000")
     result = await get_local_time(client)
 
-    assert result["timezone"] == "America/Vancouver"
+    assert result["iana_timezone"] == "America/Vancouver"
     assert "UTC" not in result["display"]
     assert result["utc"] is not None
     assert result["local"] is not None
@@ -54,5 +54,5 @@ async def test_local_time_falls_back_to_utc_when_no_position():
     client = SignalKClient(base_url="http://signalk-test:3000")
     result = await get_local_time(client)
 
-    assert result["timezone"] == "UTC"
+    assert result["iana_timezone"] == "UTC"
     assert ":" in result["display"]
