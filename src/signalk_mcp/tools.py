@@ -39,6 +39,15 @@ def _convert(path: str, value: object) -> tuple[str | None, str | None]:
       - temperature in K → °C
       - depth in m → m (no conversion, kept for completeness)
     """
+    if path == "navigation.position" and isinstance(value, dict):
+        lat = value.get("latitude")
+        lon = value.get("longitude")
+        if lat is None or lon is None:
+            return None, None
+        lat_dir = "North" if lat >= 0 else "South"
+        lon_dir = "East" if lon >= 0 else "West"
+        return f"{abs(lat):.4f}° {lat_dir}, {abs(lon):.4f}° {lon_dir}", "°"
+
     if not isinstance(value, (int, float)):
         return None, None
 

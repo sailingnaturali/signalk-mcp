@@ -82,11 +82,25 @@ async def test_depth_stays_in_metres():
 async def test_unknown_path_has_no_display():
     """Paths with no known conversion return display=None, unit=None."""
     respx.get(
+        "http://signalk-test:3000/signalk/v1/api/vessels/self/some/unknown/path"
+    ).mock(return_value=httpx.Response(
+        200, json={"value": 42.0, "timestamp": "2026-05-18T00:00:00Z"}
+    ))
+    client = SignalKClient(base_url="http://signalk-test:3000")
+    result = await read_sensor(client, "some.unknown.path")
+    assert result["display"] is None
+    assert result["unit"] is None
+
+
+@respx.mock
+async def test_position_formats_with_cardinal_directions():
+    """navigation.position formats latitude and longitude with full cardinal names."""
+    respx.get(
         "http://signalk-test:3000/signalk/v1/api/vessels/self/navigation/position"
     ).mock(return_value=httpx.Response(
         200, json={"value": {"latitude": 48.76, "longitude": -123.05}, "timestamp": "2026-05-18T00:00:00Z"}
     ))
     client = SignalKClient(base_url="http://signalk-test:3000")
     result = await read_sensor(client, "navigation.position")
-    assert result["display"] is None
-    assert result["unit"] is None
+    assert result["display"] == "48.7600° North, 123.0500° West"
+    assert result["unit"] == "°"
