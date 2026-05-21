@@ -120,13 +120,11 @@ async def get_local_time(client: SignalKClient) -> dict:
             tz = zoneinfo.ZoneInfo(tz_name)
             now_local = now_utc.astimezone(tz)
             return {
-                "utc": now_utc.isoformat(),
                 "iana_timezone": tz_name,
                 "display": now_local.strftime("%H:%M"),
             }
 
     return {
-        "utc": now_utc.isoformat(),
         "iana_timezone": "UTC",
         "display": now_utc.strftime("%H:%M"),
     }
@@ -208,7 +206,7 @@ async def read_sensor(client: SignalKClient, path: str) -> dict:
     display, unit = _convert(path, value)
     return {
         "path": path,
-        "value": value,
+        "value": None if isinstance(value, dict) else value,
         "display": display,
         "unit": unit,
         "timestamp": raw.get("timestamp"),
