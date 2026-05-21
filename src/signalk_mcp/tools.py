@@ -121,14 +121,12 @@ async def get_local_time(client: SignalKClient) -> dict:
             now_local = now_utc.astimezone(tz)
             return {
                 "utc": now_utc.isoformat(),
-                "local_iso": now_local.isoformat(),
                 "iana_timezone": tz_name,
                 "display": now_local.strftime("%H:%M"),
             }
 
     return {
         "utc": now_utc.isoformat(),
-        "local_iso": now_utc.isoformat(),
         "iana_timezone": "UTC",
         "display": now_utc.strftime("%H:%M"),
     }
