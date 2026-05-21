@@ -121,14 +121,14 @@ async def get_local_time(client: SignalKClient) -> dict:
             now_local = now_utc.astimezone(tz)
             return {
                 "utc": now_utc.isoformat(),
-                "local": now_local.isoformat(),
+                "local_iso": now_local.isoformat(),
                 "iana_timezone": tz_name,
                 "display": now_local.strftime("%H:%M"),
             }
 
     return {
         "utc": now_utc.isoformat(),
-        "local": now_utc.isoformat(),
+        "local_iso": now_utc.isoformat(),
         "iana_timezone": "UTC",
         "display": now_utc.strftime("%H:%M"),
     }
@@ -186,7 +186,7 @@ async def battery_state(client: SignalKClient, bank: str = "house") -> dict:
     display = f"{soc * 100:.0f}%" if soc is not None else None
     return {
         "bank": bank,
-        "state_of_charge": soc,
+        "soc_fraction": soc,
         "display": display,
         "voltage": voltage_obj.get("value"),
         "current": current_obj.get("value"),

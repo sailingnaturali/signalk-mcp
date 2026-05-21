@@ -27,7 +27,7 @@ async def test_local_time_pacific_northwest():
     assert result["iana_timezone"] == "America/Vancouver"
     assert "UTC" not in result["display"]
     assert result["utc"] is not None
-    assert result["local"] is not None
+    assert result["local_iso"] is not None
 
 
 @respx.mock

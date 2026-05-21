@@ -25,7 +25,7 @@ async def test_battery_state_returns_soc_voltage_current():
     result = await battery_state(client, bank="house")
 
     assert result["bank"] == "house"
-    assert result["state_of_charge"] == 0.73
+    assert result["soc_fraction"] == 0.73
     assert result["display"] == "73%"
     assert result["voltage"] == 12.84
     assert result["current"] == -8.2
@@ -51,4 +51,4 @@ async def test_battery_state_defaults_to_house_bank():
     result = await battery_state(client)
 
     assert result["bank"] == "house"
-    assert result["state_of_charge"] == 0.91
+    assert result["soc_fraction"] == 0.91
