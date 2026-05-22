@@ -220,7 +220,7 @@ async def read_sensor(client: SignalKClient, path: str) -> dict:
     display, unit = _convert(path, value)
     return {
         "path": path,
-        "value": None if isinstance(value, dict) else value,
+        "value": value,
         "display": display,
         "unit": unit,
         "timestamp": raw.get("timestamp"),

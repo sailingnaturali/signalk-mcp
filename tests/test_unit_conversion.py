@@ -106,4 +106,4 @@ async def test_position_formats_with_cardinal_directions():
     result = await read_sensor(client, "navigation.position")
     assert result["display"] == "48.7600 North, 123.0500 West"
     assert result["unit"] == "°"
-    assert result["value"] is None
+    assert result["value"] == {"latitude": 48.76, "longitude": -123.05}
