@@ -43,11 +43,13 @@ async def test_heading_converts_to_degrees_with_compass():
 
 
 @respx.mock
-async def test_wind_angle_converts_to_degrees_with_compass():
+async def test_wind_angle_uses_port_starboard():
+    """Relative wind angle (signed) → 'off the X bow', not compass label.
+    5.498 rad ≈ 315° wraps to -45° → 45° to port."""
     _mock_sensor("environment.wind.angleTrueWater", 5.498)
     client = SignalKClient(base_url="http://signalk-test:3000")
     result = await read_sensor(client, "environment.wind.angleTrueWater")
-    assert result["display"] == "315.0° (North-West wind)"
+    assert result["display"] == "45° off the port bow"
     assert result["unit"] == "°"
 
 

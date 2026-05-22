@@ -1,20 +1,34 @@
 """MCP tool implementations for signalk-mcp.
 
 Each tool is an async function that returns a JSON-serializable dict
-matching the MCP tool response schema.
+matching the contract in SPEC.md.
 """
 
 from __future__ import annotations
 
+import logging
 import math
 import zoneinfo
 from datetime import datetime, timezone
+from typing import TYPE_CHECKING
 
-from timezonefinder import TimezoneFinder
+from signalk_mcp.client import SignalKClient, validate_path_segment
 
-from signalk_mcp.client import SignalKClient
+if TYPE_CHECKING:
+    from timezonefinder import TimezoneFinder
 
-_tf = TimezoneFinder()
+logger = logging.getLogger(__name__)
+
+_tf: "TimezoneFinder | None" = None
+
+
+def _get_timezone_finder() -> "TimezoneFinder":
+    """Lazy-init TimezoneFinder — it loads ~50MB of shapefile data."""
+    global _tf
+    if _tf is None:
+        from timezonefinder import TimezoneFinder
+        _tf = TimezoneFinder()
+    return _tf
 
 
 def _degrees_to_compass(deg: float) -> str:
@@ -29,15 +43,21 @@ def _degrees_to_compass(deg: float) -> str:
     return points[idx]
 
 
+# --- conversion table key sets ---
+_SPEED_KEYS = {"speedTrue", "speedOverGround", "speedThroughWater", "speedApparent"}
+_BEARING_KEYS = {
+    "headingTrue", "headingMagnetic",
+    "courseOverGroundTrue", "courseOverGroundMagnetic",
+    "directionTrue", "directionMagnetic",
+}
+_RELATIVE_WIND_KEYS = {"angleTrueWater", "angleTrueGround", "angleApparent"}
+_DEPTH_KEYS = {"belowKeel", "belowSurface", "belowTransducer"}
+
+
 def _convert(path: str, value: object) -> tuple[str | None, str | None]:
     """Return (display_string, unit) for a known SignalK path, else (None, None).
 
-    SignalK always stores values in SI units:
-      - speeds in m/s → knots
-      - angles/headings/courses in radians → degrees
-      - pressure in Pa → hPa
-      - temperature in K → °C
-      - depth in m → m (no conversion, kept for completeness)
+    SignalK always stores values in SI units. See SPEC.md for the full table.
     """
     if path == "navigation.position" and isinstance(value, dict):
         lat = value.get("latitude")
@@ -53,41 +73,35 @@ def _convert(path: str, value: object) -> tuple[str | None, str | None]:
 
     tail = path.rsplit(".", 1)[-1]
 
-    # Speed: m/s → knots
-    _speed_keys = {"speedTrue", "speedOverGround", "speedThroughWater", "speedApparent"}
-    if tail in _speed_keys:
+    if tail in _SPEED_KEYS:
         kts = value * 1.94384
         return f"{kts:.1f} knots", "knots"
 
-    # Angles, headings, courses: radians → degrees + compass label
-    _bearing_keys = {
-        "headingTrue", "headingMagnetic",
-        "courseOverGroundTrue", "courseOverGroundMagnetic",
-    }
-    _wind_angle_keys = {"angleTrueWater", "angleApparentWater"}
-    if tail in _bearing_keys:
+    if tail in _BEARING_KEYS:
         deg = math.degrees(value) % 360
         return f"{deg:.1f}° ({_degrees_to_compass(deg)})", "°"
-    if tail in _wind_angle_keys:
-        deg = math.degrees(value) % 360
-        compass = _degrees_to_compass(deg)
-        return f"{deg:.1f}° ({compass} wind)", "°"
+
+    if tail in _RELATIVE_WIND_KEYS:
+        # Normalize to (-180, 180] so wraparound (e.g. 315° from a [0, 2π)
+        # source) is reported as 45° to port rather than off the wrong side.
+        deg = ((math.degrees(value) + 180) % 360) - 180
+        side = "starboard" if deg >= 0 else "port"
+        return f"{abs(deg):.0f}° off the {side} bow", "°"
+
     if tail == "magneticVariation":
         deg = math.degrees(value)
-        return f"{deg:.1f}°", "°"
+        side = "East" if deg >= 0 else "West"
+        return f"{abs(deg):.1f}° {side}", "°"
 
-    # Pressure: Pa → hPa
     if tail == "pressure":
         hpa = value / 100.0
         return f"{hpa:.1f} hPa", "hPa"
 
-    # Temperature: K → °C
     if tail == "temperature":
         celsius = value - 273.15
         return f"{celsius:.1f}°C", "°C"
 
-    # Depth: already metres
-    if tail in {"belowKeel", "belowSurface", "belowTransducer"}:
+    if tail in _DEPTH_KEYS:
         return f"{value:.1f} m", "m"
 
     return None, None
@@ -96,26 +110,22 @@ def _convert(path: str, value: object) -> tuple[str | None, str | None]:
 async def get_local_time(client: SignalKClient) -> dict:
     """Return current time localized to the vessel's GPS position.
 
-    Args:
-        client: An open SignalKClient.
-
-    Returns:
-        Dict with keys ``utc`` (ISO string), ``local`` (ISO string),
-        ``timezone`` (IANA name), ``display`` (e.g. ``"11:54"``).
-        Falls back to UTC if position is unavailable.
+    Falls back to UTC if position is unavailable. Network/auth errors are
+    logged and treated the same as missing position.
     """
     now_utc = datetime.now(timezone.utc)
 
+    lat = lon = None
     try:
         pos_raw = await client.get_value("navigation.position")
         pos = pos_raw.get("value") or {}
         lat = pos.get("latitude")
         lon = pos.get("longitude")
-    except Exception:
-        lat = lon = None
+    except Exception as exc:
+        logger.warning("get_local_time: failed to fetch position (%s); falling back to UTC", exc)
 
     if lat is not None and lon is not None:
-        tz_name = _tf.timezone_at(lat=lat, lng=lon)
+        tz_name = _get_timezone_finder().timezone_at(lat=lat, lng=lon)
         if tz_name:
             tz = zoneinfo.ZoneInfo(tz_name)
             now_local = now_utc.astimezone(tz)
@@ -130,16 +140,19 @@ async def get_local_time(client: SignalKClient) -> dict:
     }
 
 
+def _extract_coordinates(route: dict) -> list:
+    """Pull coordinates out of either Feature or FeatureCollection-shaped routes."""
+    feature = route.get("feature", {}) or {}
+    if feature.get("type") == "FeatureCollection":
+        features = feature.get("features") or []
+        if features:
+            return features[0].get("geometry", {}).get("coordinates", []) or []
+        return []
+    return feature.get("geometry", {}).get("coordinates", []) or []
+
+
 async def get_route(client: SignalKClient) -> dict:
-    """Return the currently active route with waypoints in order.
-
-    Returns:
-        Dict with keys ``name``, ``waypoints`` (list of {longitude, latitude}),
-        and ``start_time``.
-
-    Raises:
-        ValueError: if no active route is set.
-    """
+    """Return the currently active route with waypoints in order."""
     active = await client.get_value("navigation.courseGreatCircle.activeRoute")
     href_obj = active.get("href") or {}
     href = href_obj.get("value")
@@ -147,13 +160,14 @@ async def get_route(client: SignalKClient) -> dict:
         raise ValueError("No active route set on SignalK")
 
     route = await client.get_resource(href)
+    coords = _extract_coordinates(route)
 
-    coords = (
-        route.get("feature", {})
-        .get("geometry", {})
-        .get("coordinates", [])
-    )
-    waypoints = [{"longitude": lon, "latitude": lat} for lon, lat in coords]
+    # GeoJSON coords may be [lon, lat] or [lon, lat, elev]; take first two.
+    waypoints = [
+        {"longitude": c[0], "latitude": c[1]}
+        for c in coords
+        if isinstance(c, (list, tuple)) and len(c) >= 2
+    ]
 
     return {
         "name": route.get("name", "(unnamed)"),
@@ -162,45 +176,45 @@ async def get_route(client: SignalKClient) -> dict:
     }
 
 
-async def battery_state(client: SignalKClient, bank: str = "house") -> dict:
-    """Return state of charge, voltage, current for a battery bank.
+def _battery_display(soc: float | None, voltage: float | None, current: float | None) -> str | None:
+    """Compose a TTS-safe summary of the battery state.
 
-    Args:
-        client: An open SignalKClient.
-        bank: Battery bank name (default ``house``).
-
-    Returns:
-        Dict with keys ``bank``, ``state_of_charge`` (0-1), ``voltage`` (V),
-        ``current`` (A, negative = discharging), ``timestamp``.
+    Returns None when no fields are present (e.g. unknown bank).
     """
+    parts: list[str] = []
+    if soc is not None:
+        parts.append(f"{soc * 100:.0f} percent")
+    if voltage is not None:
+        parts.append(f"{voltage:.1f} volts")
+    if current is not None:
+        direction = "charging" if current > 0 else "discharging"
+        parts.append(f"{abs(current):.1f} amps {direction}")
+    return ", ".join(parts) if parts else None
+
+
+async def battery_state(client: SignalKClient, bank: str = "house") -> dict:
+    """Return state of charge, voltage, current for a battery bank."""
+    validate_path_segment(bank, "bank")
     raw = await client.get_value(f"electrical.batteries.{bank}")
     soc_obj = raw.get("capacity", {}).get("stateOfCharge", {}) or {}
     voltage_obj = raw.get("voltage", {}) or {}
     current_obj = raw.get("current", {}) or {}
 
     soc = soc_obj.get("value")
-    display = f"{soc * 100:.0f}%" if soc is not None else None
+    voltage = voltage_obj.get("value")
+    current = current_obj.get("value")
     return {
         "bank": bank,
         "soc_fraction": soc,
-        "display": display,
-        "voltage": voltage_obj.get("value"),
-        "current": current_obj.get("value"),
-        "timestamp": soc_obj.get("timestamp") or voltage_obj.get("timestamp"),
+        "voltage": voltage,
+        "current": current,
+        "display": _battery_display(soc, voltage, current),
+        "timestamp": soc_obj.get("timestamp") or voltage_obj.get("timestamp") or current_obj.get("timestamp"),
     }
 
 
 async def read_sensor(client: SignalKClient, path: str) -> dict:
-    """Read a SignalK path and return its current value + timestamp.
-
-    Args:
-        client: An open SignalKClient.
-        path: SignalK dotted path (e.g. ``environment.wind.speedTrue``).
-
-    Returns:
-        Dict with keys ``path``, ``value`` (raw SI), ``display`` (human-readable
-        with units, or None), ``unit`` (unit string, or None), ``timestamp``.
-    """
+    """Read a SignalK path and return its current value + display."""
     raw = await client.get_value(path)
     value = raw.get("value")
     display, unit = _convert(path, value)

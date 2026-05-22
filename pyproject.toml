@@ -12,7 +12,6 @@ dependencies = [
     "mcp>=1.27.1",
     "pydantic>=2.13.4",
     "timezonefinder>=8.2.4",
-    "websockets>=16.0",
 ]
 
 [project.scripts]

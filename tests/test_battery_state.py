@@ -26,7 +26,8 @@ async def test_battery_state_returns_soc_voltage_current():
 
     assert result["bank"] == "house"
     assert result["soc_fraction"] == 0.73
-    assert result["display"] == "73%"
+    # display is a full spoken summary now — see test_battery_display.py for details
+    assert "73 percent" in result["display"]
     assert result["voltage"] == 12.84
     assert result["current"] == -8.2
 

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
 
 import mcp.types as types
@@ -17,11 +18,16 @@ from mcp.server.stdio import stdio_server
 from signalk_mcp.client import SignalKClient
 from signalk_mcp.tools import battery_state, get_local_time, get_route, read_sensor
 
+logger = logging.getLogger(__name__)
 
-def build_server() -> Server:
-    """Construct and configure the MCP server with all tools registered."""
+
+def build_server(client: SignalKClient) -> Server:
+    """Construct and configure the MCP server with all tools registered.
+
+    The caller owns ``client`` and must close it on shutdown. One client is
+    shared across every tool call so httpx connection pooling works.
+    """
     server = Server("signalk-mcp")
-    base_url = os.environ.get("SIGNALK_URL", "http://localhost:3000")
 
     @server.list_tools()
     async def _list_tools() -> list[types.Tool]:
@@ -43,10 +49,7 @@ def build_server() -> Server:
             types.Tool(
                 name="get_route",
                 description="Get the currently active route with waypoints.",
-                inputSchema={
-                    "type": "object",
-                    "properties": {},
-                },
+                inputSchema={"type": "object", "properties": {}},
             ),
             types.Tool(
                 name="battery_state",
@@ -70,21 +73,18 @@ def build_server() -> Server:
         ]
 
     @server.call_tool()
-    async def _call_tool(name: str, args: dict) -> list[types.TextContent]:
-        client = SignalKClient(base_url=base_url)
-        try:
-            if name == "read_sensor":
-                result = await read_sensor(client, args["path"])
-            elif name == "get_route":
-                result = await get_route(client)
-            elif name == "battery_state":
-                result = await battery_state(client, bank=args.get("bank", "house"))
-            elif name == "get_local_time":
-                result = await get_local_time(client)
-            else:
-                raise ValueError(f"Unknown tool: {name}")
-        finally:
-            await client.aclose()
+    async def _call_tool(name: str, args: dict | None) -> list[types.TextContent]:
+        args = args or {}
+        if name == "read_sensor":
+            result = await read_sensor(client, args["path"])
+        elif name == "get_route":
+            result = await get_route(client)
+        elif name == "battery_state":
+            result = await battery_state(client, bank=args.get("bank", "house"))
+        elif name == "get_local_time":
+            result = await get_local_time(client)
+        else:
+            raise ValueError(f"Unknown tool: {name}")
 
         return [types.TextContent(type="text", text=json.dumps(result, indent=2))]
 
@@ -93,15 +93,20 @@ def build_server() -> Server:
 
 def main() -> None:
     """Run the signalk-mcp server over stdio."""
-    server = build_server()
+    base_url = os.environ.get("SIGNALK_URL", "http://localhost:3000")
+    client = SignalKClient(base_url=base_url)
+    server = build_server(client)
 
     async def _run() -> None:
-        async with stdio_server() as (read_stream, write_stream):
-            await server.run(
-                read_stream,
-                write_stream,
-                server.create_initialization_options(),
-            )
+        try:
+            async with stdio_server() as (read_stream, write_stream):
+                await server.run(
+                    read_stream,
+                    write_stream,
+                    server.create_initialization_options(),
+                )
+        finally:
+            await client.aclose()
 
     asyncio.run(_run())
 

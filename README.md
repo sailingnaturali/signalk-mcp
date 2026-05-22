@@ -13,7 +13,10 @@ Wraps a SignalK server (REST + WebSocket) and exposes the most useful marine dat
 - `read_sensor(path)` — Read a SignalK path (e.g., `navigation.position`, `environment.wind.speedTrue`)
 - `get_route()` — Read the current planned route (waypoints, ETAs)
 - `battery_state(bank)` — Read battery state of charge, voltage, current
+- `get_local_time()` — Current time localized to the vessel's GPS position
 - *(more in v0.2+)*
+
+See [SPEC.md](SPEC.md) for the response contract.
 
 ## Installation
 
@@ -23,7 +26,7 @@ uv tool install signalk-mcp
 
 ## Configuration
 
-Set environment variables or pass on CLI:
+Set the SignalK base URL via environment variable:
 
 ```bash
 export SIGNALK_URL=http://naturali-signalk.local:3000
