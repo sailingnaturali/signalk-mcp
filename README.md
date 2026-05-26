@@ -29,7 +29,7 @@ uv tool install signalk-mcp
 Set the SignalK base URL via environment variable:
 
 ```bash
-export SIGNALK_URL=http://naturali-signalk.local:3000
+export SIGNALK_URL=http://naturalaspi.local:3000
 signalk-mcp
 ```
 
