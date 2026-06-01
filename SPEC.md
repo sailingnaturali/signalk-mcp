@@ -116,3 +116,25 @@ starboard, negative = port). The display preserves this: e.g.
 - Write paths (e.g. `PUT` to set values).
 - Humanized timestamps.
 - Multi-vessel — `vessels/self` only.
+
+## v0.2 roadmap
+
+Planned additions, each upholding the same response contract (TTS-safe
+`display` per value, raw scalar in `value`, path-injection validation):
+
+- `get_ais_targets(max_distance=None, page=1, page_size=20)` — nearby AIS
+  contacts with distance filtering and pagination. Feeds `colregs-mcp`
+  collision awareness. Each target carries a spoken `display`
+  (e.g. `"cargo vessel, 1.2 nautical miles, bearing North-East"`).
+- `get_active_alarms()` — current SignalK notifications/alarms for the
+  Engineer agent's anomaly detection. `display` summarizes severity + path.
+- `list_paths(prefix=None)` — discover available SignalK paths under
+  `vessels/self/`, so agents can explore an unfamiliar tree.
+
+Also planned: WebSocket subscriptions, authenticated write paths, humanized
+timestamps (see Out of scope above).
+
+These three were harvested from a review of VesselSense's
+`signalk-mcp-server` (see `planning/references/vesselsense-signalk-mcp-comparison.md`).
+Their `execute_code` model was deliberately *not* adopted — it discards the
+TTS contract and is a reliability risk for the local Hermes 3 8B voice layer.
