@@ -18,12 +18,15 @@ invariants:
    spelled-out units (`"knots"`, not `"kn"`), spelled-out compass points
    (`"North-East"`, not `"NE"`), no ISO timestamps, no bare lat/lon, no
    unit suffixes the agent might pronounce as letters (`°T`, `kn`).
-2. **`value`** — the raw SI scalar for downstream programmatic use.
+2. **`value`** — the raw payload for downstream programmatic use.
    - Scalar SignalK paths (m/s, radians, Pa, K, V, A, fraction) return the
      raw number.
-   - Structured paths (position, waypoint lists) return `None` here; the
-     structured payload is exposed under a tool-specific key
-     (e.g. `waypoints`).
+   - `navigation.position` returns the raw `{latitude, longitude}` dict:
+     agents calling `read_sensor("navigation.position")` need real
+     coordinates for programmatic use, so the dict rides in `value` while
+     the spoken form lives in `display`.
+   - Tools that return a list (e.g. `get_route`) expose the structured
+     payload under a tool-specific key (e.g. `waypoints`), not `value`.
 3. **`unit`** — the unit of `value` as a short string (`"knots"`, `"°"`,
    `"V"`, `"A"`, `"hPa"`, `"°C"`, `"m"`, `null`). The unit applies to the
    *converted* display, not the raw SI input.
@@ -35,7 +38,9 @@ invariants:
 Any field that can carry a number the agent might speak must have a
 companion `display` string. Specifically:
 
-- Position: `display` only; no raw lat/lon at top level.
+- Position: raw `{latitude, longitude}` stays in `value` for programmatic
+  use, but the agent speaks `display` (cardinal-name lat/lon), never the
+  raw pair.
 - Battery voltage/current/SOC: each gets a spoken display (`"12.8 volts"`,
   `"8.2 amps discharging"`, `"73 percent"`). Raw values stay in their own
   keys for downstream use.
@@ -67,8 +72,9 @@ once when the stdio transport exits.
 ### `read_sensor(path: str)`
 - `path` must be a dotted SignalK path under `vessels/self/`.
 - Returns `{path, value, display, unit, timestamp}`.
-- For `navigation.position`, `value` is `None` and `display` carries the
-  full cardinal-name lat/lon.
+- For `navigation.position`, `value` carries the raw `{latitude, longitude}`
+  dict (agents need real coordinates programmatically) and `display` carries
+  the full cardinal-name lat/lon for speech.
 
 ### `get_route()`
 - Returns `{name, waypoints, start_time}` for the currently active route.
