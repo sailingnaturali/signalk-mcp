@@ -67,11 +67,34 @@ created at server startup and reused for the lifetime of the process.
 Tool handlers must not create their own clients. The client is closed
 once when the stdio transport exits.
 
+## Error handling
+
+A SignalK **404 is not an error** — it means the vessel doesn't publish that
+path (no such sensor, or a guessed/misspelled path). The client treats it as
+a normal "not available" result: `get_value` returns `{value: None,
+timestamp: None}` and `read_sensor` returns `value=None, display=None`. It
+does **not** raise.
+
+This is deliberate. Agent runtimes commonly run a per-tool circuit breaker
+(e.g. Hermes trips after 3 consecutive `same_tool` failures). A smaller model
+that fans out across several guessed paths — `headingTrue`, `headingMagnetic`,
+etc. on a vessel with no compass — would otherwise generate a burst of 404s,
+each counted as a tool failure, tripping the breaker and blocking the *valid*
+reads queued behind them (e.g. `courseOverGroundTrue`). Returning a clean null
+keeps a missing path a successful call.
+
+Any other HTTP status (5xx, etc.) and connection/timeout failures are genuine
+faults and still raise — those *should* surface to the client.
+
 ## Tools
 
 ### `read_sensor(path: str)`
 - `path` must be a dotted SignalK path under `vessels/self/`.
 - Returns `{path, value, display, unit, timestamp}`.
+- If the path is absent (SignalK 404), returns `value=None, display=None,
+  unit=None, timestamp=None` rather than raising — see **Error handling**. A
+  present-but-unpopulated path (e.g. `courseOverGroundTrue` while stationary)
+  is reported the same way: `value=None`.
 - For `navigation.position`, `value` carries the raw `{latitude, longitude}`
   dict (agents need real coordinates programmatically) and `display` carries
   the full cardinal-name lat/lon for speech.

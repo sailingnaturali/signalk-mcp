@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v0.2.0 — 2026-06-03
+
 ### Added
 
 - `get_local_time` tool — GPS-aware timezone localization
@@ -23,6 +25,7 @@
 
 ### Changed
 
+- A SignalK 404 (path not published) now returns `value=None` instead of raising. Missing/guessed paths are a normal "not available" result, not a tool failure — prevents a burst of 404s (e.g. heading paths on a vessel with no compass) from tripping an agent runtime's consecutive-failure circuit breaker and blocking valid reads. Non-404 errors (5xx, connection) still raise.
 - `SignalKClient` is now shared across tool calls (one httpx connection pool per process)
 - `TimezoneFinder` initialization deferred until first `get_local_time` call (was loading ~50MB at import)
 - `build_server(client)` now takes the client as a required argument; caller owns its lifetime

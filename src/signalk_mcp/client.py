@@ -29,11 +29,21 @@ class SignalKClient:
         self._http = httpx.AsyncClient(timeout=5.0)
 
     async def get_value(self, path: str) -> dict:
-        """Fetch a SignalK path's value object. Returns the raw API response dict."""
+        """Fetch a SignalK path's value object. Returns the raw API response dict.
+
+        A 404 means the vessel simply doesn't publish that path — a normal
+        "not available" result, not a failure. We return a null-valued dict
+        rather than raising so that missing/guessed paths don't register as
+        tool failures (which can trip a client's consecutive-failure circuit
+        breaker). Any other HTTP error (5xx, etc.) is a real fault and still
+        raises.
+        """
         validate_path_segment(path, "path")
         url_path = path.replace(".", "/")
         url = f"{self.base_url}/signalk/v1/api/vessels/self/{url_path}"
         resp = await self._http.get(url)
+        if resp.status_code == 404:
+            return {"value": None, "timestamp": None}
         resp.raise_for_status()
         return resp.json()
 

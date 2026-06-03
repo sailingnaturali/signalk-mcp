@@ -27,13 +27,31 @@ async def test_read_sensor_returns_value_for_known_path():
 
 
 @respx.mock
-async def test_read_sensor_raises_on_unknown_path():
-    """read_sensor surfaces HTTP errors clearly."""
+async def test_read_sensor_returns_null_for_absent_path():
+    """A 404 means the vessel doesn't publish that path — a normal 'unavailable'
+    result, not an error. read_sensor must NOT raise, so a string of guessed/
+    missing paths can't trip a client's consecutive-failure circuit breaker."""
     respx.get(
-        "http://signalk-test:3000/signalk/v1/api/vessels/self/no/such/thing"
+        "http://signalk-test:3000/signalk/v1/api/vessels/self/navigation/headingTrue"
     ).mock(return_value=httpx.Response(404))
+
+    client = SignalKClient(base_url="http://signalk-test:3000")
+    result = await read_sensor(client, "navigation.headingTrue")
+
+    assert result["value"] is None
+    assert result["display"] is None
+    assert result["path"] == "navigation.headingTrue"
+
+
+@respx.mock
+async def test_read_sensor_raises_on_server_error():
+    """A real failure (5xx, connection) is NOT a missing path and must still
+    surface as an error so genuine outages are visible to the client."""
+    respx.get(
+        "http://signalk-test:3000/signalk/v1/api/vessels/self/navigation/speedOverGround"
+    ).mock(return_value=httpx.Response(500))
 
     client = SignalKClient(base_url="http://signalk-test:3000")
 
     with pytest.raises(httpx.HTTPStatusError):
-        await read_sensor(client, "no.such.thing")
+        await read_sensor(client, "navigation.speedOverGround")
