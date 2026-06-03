@@ -88,11 +88,36 @@ async def test_dispatch_get_local_time(server) -> None:
     assert "iana_timezone" in payload
 
 
-async def test_list_tools_includes_all_four(server) -> None:
+async def test_list_tools_includes_all_tools(server) -> None:
     from mcp.types import ListToolsRequest
 
     handler = server.request_handlers[ListToolsRequest]
     req = ListToolsRequest(method="tools/list")
     result = await handler(req)
     names = {tool.name for tool in result.root.tools}
-    assert names == {"read_sensor", "get_route", "battery_state", "get_local_time"}
+    assert names == {"read_sensor", "get_route", "battery_state", "get_local_time", "list_paths"}
+
+
+@respx.mock
+async def test_dispatch_list_paths(server) -> None:
+    respx.get(
+        "http://signalk-test:3000/signalk/v1/api/vessels/self/"
+    ).mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "environment": {
+                    "depth": {
+                        "belowTransducer": {
+                            "value": 27.1,
+                            "meta": {"units": "m", "description": "Depth below Transducer"},
+                        }
+                    }
+                }
+            },
+        )
+    )
+    result = await _call_registered_tool(server, "list_paths", {})
+    payload = json.loads(result.root.content[0].text)
+    assert payload["count"] == 1
+    assert payload["paths"][0]["path"] == "environment.depth.belowTransducer"

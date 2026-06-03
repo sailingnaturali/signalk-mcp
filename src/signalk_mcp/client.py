@@ -47,6 +47,20 @@ class SignalKClient:
         resp.raise_for_status()
         return resp.json()
 
+    async def get_self_tree(self) -> dict:
+        """Fetch the entire ``vessels/self`` tree (for path discovery).
+
+        A 404 (no self vessel published yet) returns an empty dict rather than
+        raising — same "absent is not a failure" rule as ``get_value``. Other
+        HTTP errors still raise.
+        """
+        url = f"{self.base_url}/signalk/v1/api/vessels/self/"
+        resp = await self._http.get(url)
+        if resp.status_code == 404:
+            return {}
+        resp.raise_for_status()
+        return resp.json()
+
     async def get_resource(self, href: str) -> dict:
         """Fetch a resource by its SignalK API href (e.g. ``/resources/routes/r-1``)."""
         url = f"{self.base_url}/signalk/v1/api{href}"

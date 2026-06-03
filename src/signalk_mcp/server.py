@@ -16,7 +16,7 @@ from mcp.server import Server
 from mcp.server.stdio import stdio_server
 
 from signalk_mcp.client import SignalKClient
-from signalk_mcp.tools import battery_state, get_local_time, get_route, read_sensor
+from signalk_mcp.tools import battery_state, get_local_time, get_route, list_paths, read_sensor
 
 logger = logging.getLogger(__name__)
 
@@ -70,6 +70,24 @@ def build_server(client: SignalKClient) -> Server:
                 description="Get current time localized to the vessel's GPS position.",
                 inputSchema={"type": "object", "properties": {}},
             ),
+            types.Tool(
+                name="list_paths",
+                description=(
+                    "Discover which SignalK paths this vessel publishes, with units and "
+                    "descriptions. Call this before guessing a path name (depth is "
+                    "'environment.depth.belowTransducer', not 'sensors.depth'). Optional "
+                    "'prefix' filters results (e.g. 'navigation', 'environment.depth')."
+                ),
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "prefix": {
+                            "type": "string",
+                            "description": "Only return paths starting with this string.",
+                        }
+                    },
+                },
+            ),
         ]
 
     @server.call_tool()
@@ -83,6 +101,8 @@ def build_server(client: SignalKClient) -> Server:
             result = await battery_state(client, bank=args.get("bank", "house"))
         elif name == "get_local_time":
             result = await get_local_time(client)
+        elif name == "list_paths":
+            result = await list_paths(client, prefix=args.get("prefix"))
         else:
             raise ValueError(f"Unknown tool: {name}")
 

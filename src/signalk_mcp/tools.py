@@ -225,3 +225,42 @@ async def read_sensor(client: SignalKClient, path: str) -> dict:
         "unit": unit,
         "timestamp": raw.get("timestamp"),
     }
+
+
+# Keys inside a SignalK node that are metadata, not child paths.
+_NON_PATH_KEYS = {"meta", "$source", "source", "timestamp", "pgn", "sentence"}
+
+
+def _flatten_paths(node: object, prefix: str = "") -> list[dict]:
+    """Walk a SignalK tree, emitting one row per value-bearing leaf.
+
+    A dict containing a ``value`` key is a leaf path (don't recurse into it);
+    anything else is a branch we recurse into, skipping metadata keys. ``units``
+    and ``description`` come from the leaf's ``meta`` (``None`` when absent).
+    """
+    if not isinstance(node, dict):
+        return []
+    if "value" in node:
+        meta = node.get("meta") or {}
+        return [{"path": prefix, "units": meta.get("units"), "description": meta.get("description")}]
+    rows: list[dict] = []
+    for key, child in node.items():
+        if key in _NON_PATH_KEYS:
+            continue
+        child_prefix = f"{prefix}.{key}" if prefix else key
+        rows.extend(_flatten_paths(child, child_prefix))
+    return rows
+
+
+async def list_paths(client: SignalKClient, prefix: str | None = None) -> dict:
+    """List the SignalK paths this vessel actually publishes, so an agent can
+    discover the right path (e.g. ``environment.depth.belowTransducer``) instead
+    of guessing. Returns ``{paths: [{path, units, description}], count}`` sorted
+    by path. ``prefix`` filters to paths starting with that string.
+    """
+    tree = await client.get_self_tree()
+    rows = _flatten_paths(tree)
+    if prefix:
+        rows = [r for r in rows if r["path"].startswith(prefix)]
+    rows.sort(key=lambda r: r["path"])
+    return {"paths": rows, "count": len(rows)}

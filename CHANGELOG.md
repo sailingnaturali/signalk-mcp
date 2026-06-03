@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## v0.3.0 — 2026-06-03
+
+### Added
+
+- `list_paths` tool — discover the SignalK paths a vessel actually publishes, each with `units` and `description` from `meta`, optional `prefix` filter. Lets an agent find the real path (`environment.depth.belowTransducer`) instead of guessing wrong namespaces (`sensors.depth`, `sailboatLogic.speedThroughWater`). No live values in the output — chain `list_paths` → `read_sensor`. A 404 at the tree root returns an empty list, consistent with the v0.2.0 404 rule.
+
 ## v0.2.0 — 2026-06-03
 
 ### Added

@@ -99,6 +99,17 @@ faults and still raise — those *should* surface to the client.
   dict (agents need real coordinates programmatically) and `display` carries
   the full cardinal-name lat/lon for speech.
 
+### `list_paths(prefix: str = None)`
+- Returns `{paths: [{path, units, description}, ...], count}`, sorted by `path`.
+- Flattens the `vessels/self` tree to one row per value-bearing leaf; `units`
+  and `description` come from each leaf's `meta` (`None` when absent).
+- `prefix` filters to paths starting with that string (e.g. `"navigation"`,
+  `"environment.depth"`). Applied in-process, never interpolated into a URL.
+- Carries **no live values** — discovery only. Chain into `read_sensor` for
+  values. Paths that don't exist (e.g. an empty heading sentence) never appear,
+  so the result is the set of paths actually publishing data.
+- A 404 at the tree root returns `{paths: [], count: 0}` (see **Error handling**).
+
 ### `get_route()`
 - Returns `{name, waypoints, start_time}` for the currently active route.
 - `waypoints` is a list of `{longitude, latitude}` dicts in order.
