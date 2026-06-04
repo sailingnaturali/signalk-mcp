@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## v0.5.0 — 2026-06-04
+
+### Added
+
+- `get_active_alarms`: returns active SignalK notifications (non-`normal`
+  states), most severe first, with the `notifications.` prefix stripped so each
+  path feeds vessel-knowledge `explain_notification`. Backs the Engineer agent's
+  "anything wrong?" triage.
+
 ## v0.3.0 — 2026-06-03
 
 ### Added
