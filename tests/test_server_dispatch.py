@@ -95,7 +95,7 @@ async def test_list_tools_includes_all_tools(server) -> None:
     req = ListToolsRequest(method="tools/list")
     result = await handler(req)
     names = {tool.name for tool in result.root.tools}
-    assert names == {"read_sensor", "get_route", "battery_state", "get_local_time", "list_paths"}
+    assert names == {"read_sensor", "get_route", "battery_state", "depth_state", "get_local_time", "list_paths"}
 
 
 @respx.mock

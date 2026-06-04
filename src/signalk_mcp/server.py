@@ -16,7 +16,14 @@ from mcp.server import Server
 from mcp.server.stdio import stdio_server
 
 from signalk_mcp.client import SignalKClient
-from signalk_mcp.tools import battery_state, get_local_time, get_route, list_paths, read_sensor
+from signalk_mcp.tools import (
+    battery_state,
+    depth_state,
+    get_local_time,
+    get_route,
+    list_paths,
+    read_sensor,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -66,6 +73,16 @@ def build_server(client: SignalKClient) -> Server:
                 },
             ),
             types.Tool(
+                name="depth_state",
+                description=(
+                    "Water depth with under-keel clearance first. Use this for "
+                    "'how's our depth?' and 'how close are we to running aground?' — "
+                    "below_keel_m IS the clearance under the hull (no draft math needed). "
+                    "Do not guess depth paths or compute clearance yourself; call this."
+                ),
+                inputSchema={"type": "object", "properties": {}},
+            ),
+            types.Tool(
                 name="get_local_time",
                 description="Get current time localized to the vessel's GPS position.",
                 inputSchema={"type": "object", "properties": {}},
@@ -99,6 +116,8 @@ def build_server(client: SignalKClient) -> Server:
             result = await get_route(client)
         elif name == "battery_state":
             result = await battery_state(client, bank=args.get("bank", "house"))
+        elif name == "depth_state":
+            result = await depth_state(client)
         elif name == "get_local_time":
             result = await get_local_time(client)
         elif name == "list_paths":

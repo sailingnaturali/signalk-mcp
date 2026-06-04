@@ -125,6 +125,19 @@ faults and still raise — those *should* surface to the client.
   discharging"`).
 - `bank` must match the path-validation rule.
 
+### `depth_state()`
+- Returns `{below_keel_m, below_surface_m, below_transducer_m, display,
+  timestamp}`.
+- `display` leads with under-keel clearance (e.g. `"4.2 metres under the
+  keel, 5.5 metres of water"`) — `below_keel_m` **is** the clearance under
+  the hull, so an agent answers "how's our depth?" / "how close are we to
+  running aground?" without guessing paths or doing draft math.
+- When `belowKeel` isn't published (e.g. a DBT-only sounder with no keel
+  offset), `display` falls back to surface- or transducer-referenced depth,
+  explicitly labelled `"under-keel clearance unavailable"` — never passes a
+  transducer reading off as keel clearance.
+- No depth published → all values `None`, `display` `None` (no fabrication).
+
 ### `get_local_time()`
 - Returns `{iana_timezone, display}` where `display` is `HH:MM` in the
   vessel's local time, or UTC if position is unavailable.

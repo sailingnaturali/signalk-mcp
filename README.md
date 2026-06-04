@@ -13,8 +13,9 @@ Wraps a SignalK server (REST + WebSocket) and exposes the most useful marine dat
 - `read_sensor(path)` — Read a SignalK path (e.g., `navigation.position`, `environment.wind.speedTrue`)
 - `get_route()` — Read the current planned route (waypoints, ETAs)
 - `battery_state(bank)` — Read battery state of charge, voltage, current
+- `depth_state()` — Water depth with under-keel clearance first (answers "how's our depth?" / "how close are we to running aground?")
 - `get_local_time()` — Current time localized to the vessel's GPS position
-- *(more in v0.2+)*
+- `list_paths(prefix)` — Discover which SignalK paths the vessel publishes
 
 See [SPEC.md](SPEC.md) for the response contract.
 

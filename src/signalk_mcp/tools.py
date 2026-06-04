@@ -213,6 +213,66 @@ async def battery_state(client: SignalKClient, bank: str = "house") -> dict:
     }
 
 
+def _depth_display(
+    below_keel: float | None,
+    below_surface: float | None,
+    below_transducer: float | None,
+) -> str | None:
+    """Compose a TTS-safe depth summary that leads with under-keel clearance.
+
+    belowKeel IS the clearance under the hull — the answer to "how's our depth?"
+    and "how close are we to running aground?", no draft arithmetic required.
+    When it's absent (e.g. a DBT-only sounder with no keel offset configured)
+    we say so rather than passing a transducer reading off as keel clearance.
+    """
+    if below_keel is not None:
+        s = f"{below_keel:.1f} metres under the keel"
+        if below_surface is not None:
+            s += f", {below_surface:.1f} metres of water"
+        return s
+    if below_surface is not None:
+        return (
+            f"{below_surface:.1f} metres of water from the surface; "
+            "under-keel clearance unavailable"
+        )
+    if below_transducer is not None:
+        return (
+            f"{below_transducer:.1f} metres below the transducer; "
+            "under-keel clearance unavailable"
+        )
+    return None
+
+
+async def depth_state(client: SignalKClient) -> dict:
+    """Return water depth with under-keel clearance front and centre.
+
+    Reads the ``environment.depth`` subtree and leads with ``belowKeel`` (the
+    clearance under the hull) so an agent never has to guess paths or do draft
+    math to answer depth / grounding questions. Falls back to surface- or
+    transducer-referenced depth, clearly labelled, when keel clearance isn't
+    published.
+    """
+    raw = await client.get_value("environment.depth")
+    below_keel_obj = raw.get("belowKeel") or {}
+    below_surface_obj = raw.get("belowSurface") or {}
+    below_transducer_obj = raw.get("belowTransducer") or {}
+
+    below_keel = below_keel_obj.get("value")
+    below_surface = below_surface_obj.get("value")
+    below_transducer = below_transducer_obj.get("value")
+    return {
+        "below_keel_m": below_keel,
+        "below_surface_m": below_surface,
+        "below_transducer_m": below_transducer,
+        "display": _depth_display(below_keel, below_surface, below_transducer),
+        "timestamp": (
+            below_keel_obj.get("timestamp")
+            or below_surface_obj.get("timestamp")
+            or below_transducer_obj.get("timestamp")
+        ),
+    }
+
+
 async def read_sensor(client: SignalKClient, path: str) -> dict:
     """Read a SignalK path and return its current value + display."""
     raw = await client.get_value(path)
