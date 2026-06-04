@@ -19,6 +19,7 @@ from signalk_mcp.client import SignalKClient
 from signalk_mcp.tools import (
     battery_state,
     depth_state,
+    get_active_alarms,
     get_local_time,
     get_route,
     list_paths,
@@ -39,6 +40,16 @@ def build_server(client: SignalKClient) -> Server:
     @server.list_tools()
     async def _list_tools() -> list[types.Tool]:
         return [
+            types.Tool(
+                name="get_active_alarms",
+                description=(
+                    "Active SignalK notifications (alarms/warnings), most severe first. "
+                    "Use for 'anything wrong?' / 'systems check'. Each entry's `path` is "
+                    "the monitored SignalK path — pass it to vessel-knowledge "
+                    "explain_notification to triage. Empty list means all systems nominal."
+                ),
+                inputSchema={"type": "object", "properties": {}},
+            ),
             types.Tool(
                 name="read_sensor",
                 description="Read a SignalK path's current value and timestamp.",
@@ -110,7 +121,9 @@ def build_server(client: SignalKClient) -> Server:
     @server.call_tool()
     async def _call_tool(name: str, args: dict | None) -> list[types.TextContent]:
         args = args or {}
-        if name == "read_sensor":
+        if name == "get_active_alarms":
+            result = await get_active_alarms(client)
+        elif name == "read_sensor":
             result = await read_sensor(client, args["path"])
         elif name == "get_route":
             result = await get_route(client)

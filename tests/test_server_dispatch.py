@@ -95,7 +95,7 @@ async def test_list_tools_includes_all_tools(server) -> None:
     req = ListToolsRequest(method="tools/list")
     result = await handler(req)
     names = {tool.name for tool in result.root.tools}
-    assert names == {"read_sensor", "get_route", "battery_state", "depth_state", "get_local_time", "list_paths"}
+    assert names == {"read_sensor", "get_route", "battery_state", "depth_state", "get_local_time", "list_paths", "get_active_alarms"}
 
 
 @respx.mock
@@ -121,3 +121,16 @@ async def test_dispatch_list_paths(server) -> None:
     payload = json.loads(result.root.content[0].text)
     assert payload["count"] == 1
     assert payload["paths"][0]["path"] == "environment.depth.belowTransducer"
+
+
+@respx.mock
+async def test_dispatch_get_active_alarms(server):
+    respx.get(
+        "http://signalk-test:3000/signalk/v1/api/vessels/self/notifications"
+    ).mock(return_value=httpx.Response(200, json={
+        "propulsion": {"0": {"temperature": {"value": {"state": "warn", "message": "hot"}}}}
+    }))
+    result = await _call_registered_tool(server, "get_active_alarms", {})
+    payload = json.loads(result.root.content[0].text)
+    assert payload["alarms"][0]["path"] == "propulsion.0.temperature"
+    assert payload["alarms"][0]["state"] == "warn"
