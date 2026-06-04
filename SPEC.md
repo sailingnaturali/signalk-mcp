@@ -129,7 +129,7 @@ faults and still raise — those *should* surface to the client.
 - Returns `{below_keel_m, below_surface_m, below_transducer_m, display,
   timestamp}`.
 - `display` leads with under-keel clearance (e.g. `"4.2 metres under the
-  keel, 5.5 metres of water"`) — `below_keel_m` **is** the clearance under
+  keel, 5.5 metres total depth"`) — `below_keel_m` **is** the clearance under
   the hull, so an agent answers "how's our depth?" / "how close are we to
   running aground?" without guessing paths or doing draft math.
 - When `belowKeel` isn't published (e.g. a DBT-only sounder with no keel

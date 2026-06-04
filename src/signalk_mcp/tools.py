@@ -228,11 +228,13 @@ def _depth_display(
     if below_keel is not None:
         s = f"{below_keel:.1f} metres under the keel"
         if below_surface is not None:
-            s += f", {below_surface:.1f} metres of water"
+            # "total depth" — surface to seabed. Spell it out: a bare
+            # "N metres of water" got narrated as "water above us" by an 8B.
+            s += f", {below_surface:.1f} metres total depth"
         return s
     if below_surface is not None:
         return (
-            f"{below_surface:.1f} metres of water from the surface; "
+            f"{below_surface:.1f} metres total depth (surface to seabed); "
             "under-keel clearance unavailable"
         )
     if below_transducer is not None:

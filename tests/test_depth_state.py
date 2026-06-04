@@ -34,7 +34,9 @@ async def test_depth_state_leads_with_under_keel_clearance():
     assert result["below_transducer_m"] == 5.99
     # Spoken summary leads with under-keel clearance.
     assert result["display"].startswith("4.9 metres under the keel")
-    assert "6.2 metres of water" in result["display"]
+    assert "6.2 metres total depth" in result["display"]
+    # Must not invite the "water above us" misread.
+    assert "of water" not in result["display"]
     assert result["timestamp"] == "2026-06-04T01:55:00Z"
 
 
