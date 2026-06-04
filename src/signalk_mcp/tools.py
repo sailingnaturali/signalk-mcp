@@ -292,6 +292,55 @@ async def read_sensor(client: SignalKClient, path: str) -> dict:
 # Keys inside a SignalK node that are metadata, not child paths.
 _NON_PATH_KEYS = {"meta", "$source", "source", "timestamp", "pgn", "sentence"}
 
+_ALARM_SEVERITY = {"emergency": 0, "alarm": 1, "warn": 2, "alert": 3}
+_INACTIVE_STATES = {"normal", "nominal"}
+
+
+def _flatten_alarms(node: object, prefix: str = "") -> list[dict]:
+    """Walk a SignalK notifications subtree, emitting one row per ACTIVE alarm.
+
+    A leaf is a dict with a ``value`` key; the notification payload is that
+    ``value`` (a dict with ``state``/``message``/``timestamp``). A null value is
+    a cleared alarm. States ``normal``/``nominal`` are not active. ``prefix`` is
+    already free of the ``notifications.`` prefix because the caller fetched the
+    subtree endpoint.
+    """
+    if not isinstance(node, dict):
+        return []
+    if "value" in node:
+        val = node.get("value")
+        if not isinstance(val, dict):
+            return []
+        state = val.get("state")
+        if state is None or state in _INACTIVE_STATES:
+            return []
+        return [{
+            "path": prefix,
+            "state": state,
+            "message": val.get("message"),
+            "timestamp": val.get("timestamp") or node.get("timestamp"),
+        }]
+    rows: list[dict] = []
+    for key, child in node.items():
+        if key in _NON_PATH_KEYS:
+            continue
+        child_prefix = f"{prefix}.{key}" if prefix else key
+        rows.extend(_flatten_alarms(child, child_prefix))
+    return rows
+
+
+async def get_active_alarms(client: SignalKClient) -> dict:
+    """Active SignalK notifications (anything not ``normal``), worst severity first.
+
+    Returns ``{alarms: [{path, state, message, timestamp}]}`` with ``path`` as the
+    monitored SignalK path (no ``notifications.`` prefix) so it feeds straight into
+    vessel-knowledge's ``explain_notification``. Empty list means all clear.
+    """
+    tree = await client.get_notifications()
+    rows = _flatten_alarms(tree)
+    rows.sort(key=lambda r: _ALARM_SEVERITY.get(r["state"], 99))
+    return {"alarms": rows}
+
 
 def _flatten_paths(node: object, prefix: str = "") -> list[dict]:
     """Walk a SignalK tree, emitting one row per value-bearing leaf.
