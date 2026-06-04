@@ -68,3 +68,14 @@ async def test_get_active_alarms_carries_timestamp():
     result = await get_active_alarms(_client())
     warn = next(a for a in result["alarms"] if a["path"] == "propulsion.0.temperature")
     assert warn["timestamp"] == "2026-06-04T00:00:00Z"
+
+
+@respx.mock
+async def test_get_active_alarms_skips_value_without_state():
+    respx.get(NOTIF_URL).mock(return_value=httpx.Response(200, json={
+        "propulsion": {"0": {"temperature": {"value": {"message": "no state field"}}}},
+        "electrical": {"batteries": {"house": {"voltage": {"value": {"state": "alarm"}}}}},
+    }))
+    result = await get_active_alarms(_client())
+    paths = {a["path"] for a in result["alarms"]}
+    assert paths == {"electrical.batteries.house.voltage"}  # state-less leaf excluded
