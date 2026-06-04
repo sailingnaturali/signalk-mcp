@@ -61,6 +61,22 @@ class SignalKClient:
         resp.raise_for_status()
         return resp.json()
 
+    async def get_notifications(self) -> dict:
+        """Fetch the ``notifications`` subtree under ``vessels/self``.
+
+        Returns the subtree rooted at ``notifications`` (its keys are the
+        monitored path segments, e.g. ``propulsion``), so leaf paths come out
+        already stripped of the ``notifications.`` prefix. A 404 (nothing
+        published) returns an empty dict — same "absent is not a failure" rule
+        as ``get_self_tree``.
+        """
+        url = f"{self.base_url}/signalk/v1/api/vessels/self/notifications"
+        resp = await self._http.get(url)
+        if resp.status_code == 404:
+            return {}
+        resp.raise_for_status()
+        return resp.json()
+
     async def get_resource(self, href: str) -> dict:
         """Fetch a resource by its SignalK API href (e.g. ``/resources/routes/r-1``)."""
         url = f"{self.base_url}/signalk/v1/api{href}"
