@@ -119,11 +119,13 @@ faults and still raise — those *should* surface to the client.
   shapes are accepted.
 - Raises `ValueError` if no active route is set.
 
-### `battery_state(bank: str = "house")`
+### `battery_state(bank: str = "0")`
 - Returns `{bank, soc_fraction, voltage, current, display, timestamp}`.
 - `display` is a spoken summary (e.g. `"73 percent, 12.8 volts, 8.2 amps
   discharging"`).
-- `bank` must match the path-validation rule.
+- `bank` is the instance key under `electrical.batteries` —
+  conventionally numeric (`"0"`), named banks (`"house"`) also work.
+  Must match the path-validation rule.
 
 ### `depth_state()`
 - Returns `{below_keel_m, below_surface_m, below_transducer_m, display,

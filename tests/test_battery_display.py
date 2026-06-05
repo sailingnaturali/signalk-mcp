@@ -39,7 +39,7 @@ async def test_battery_display_includes_spoken_units():
 async def test_battery_display_says_charging_for_positive_current():
     _mock_battery(0.5, 14.1, 5.0)
     client = SignalKClient(base_url="http://signalk-test:3000")
-    result = await battery_state(client)
+    result = await battery_state(client, bank="house")
     assert "charging" in result["display"]
     assert "discharging" not in result["display"]
     await client.aclose()
@@ -50,7 +50,7 @@ async def test_battery_raw_values_preserved():
     """Raw fields stay alongside display so downstream tools can use them."""
     _mock_battery(0.73, 12.84, -8.2)
     client = SignalKClient(base_url="http://signalk-test:3000")
-    result = await battery_state(client)
+    result = await battery_state(client, bank="house")
     assert result["soc_fraction"] == 0.73
     assert result["voltage"] == 12.84
     assert result["current"] == -8.2
@@ -64,7 +64,7 @@ async def test_battery_display_handles_missing_values():
         "http://signalk-test:3000/signalk/v1/api/vessels/self/electrical/batteries/house"
     ).mock(return_value=httpx.Response(200, json={}))
     client = SignalKClient(base_url="http://signalk-test:3000")
-    result = await battery_state(client)
+    result = await battery_state(client, bank="house")
     assert result["soc_fraction"] is None
     assert result["display"] is None
     await client.aclose()

@@ -33,10 +33,10 @@ async def test_battery_state_returns_soc_voltage_current():
 
 
 @respx.mock
-async def test_battery_state_defaults_to_house_bank():
-    """battery_state uses 'house' as the default bank."""
+async def test_battery_state_defaults_to_instance_zero():
+    """battery_state uses '0' (conventional SignalK instance) as the default bank."""
     respx.get(
-        "http://signalk-test:3000/signalk/v1/api/vessels/self/electrical/batteries/house"
+        "http://signalk-test:3000/signalk/v1/api/vessels/self/electrical/batteries/0"
     ).mock(
         return_value=httpx.Response(
             200,
@@ -51,5 +51,5 @@ async def test_battery_state_defaults_to_house_bank():
     client = SignalKClient(base_url="http://signalk-test:3000")
     result = await battery_state(client)
 
-    assert result["bank"] == "house"
+    assert result["bank"] == "0"
     assert result["soc_fraction"] == 0.91

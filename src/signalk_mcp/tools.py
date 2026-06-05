@@ -192,8 +192,12 @@ def _battery_display(soc: float | None, voltage: float | None, current: float | 
     return ", ".join(parts) if parts else None
 
 
-async def battery_state(client: SignalKClient, bank: str = "house") -> dict:
-    """Return state of charge, voltage, current for a battery bank."""
+async def battery_state(client: SignalKClient, bank: str = "0") -> dict:
+    """Return state of charge, voltage, current for a battery bank.
+
+    ``bank`` is the SignalK instance key under ``electrical.batteries`` —
+    conventionally numeric ("0"), but named banks ("house") work too.
+    """
     validate_path_segment(bank, "bank")
     raw = await client.get_value(f"electrical.batteries.{bank}")
     soc_obj = raw.get("capacity", {}).get("stateOfCharge", {}) or {}

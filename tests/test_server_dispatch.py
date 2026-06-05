@@ -63,7 +63,7 @@ async def test_dispatch_read_sensor(server) -> None:
 async def test_dispatch_battery_state_defaults(server) -> None:
     """call_tool must accept arguments=None (some MCP clients omit it)."""
     respx.get(
-        "http://signalk-test:3000/signalk/v1/api/vessels/self/electrical/batteries/house"
+        "http://signalk-test:3000/signalk/v1/api/vessels/self/electrical/batteries/0"
     ).mock(
         return_value=httpx.Response(
             200,
@@ -76,7 +76,7 @@ async def test_dispatch_battery_state_defaults(server) -> None:
     )
     result = await _call_registered_tool(server, "battery_state", None)
     payload = json.loads(result.root.content[0].text)
-    assert payload["bank"] == "house"
+    assert payload["bank"] == "0"
 
 
 @respx.mock

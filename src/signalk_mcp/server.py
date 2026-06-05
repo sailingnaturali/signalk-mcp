@@ -77,8 +77,8 @@ def build_server(client: SignalKClient) -> Server:
                     "properties": {
                         "bank": {
                             "type": "string",
-                            "default": "house",
-                            "description": "Battery bank name (default 'house').",
+                            "default": "0",
+                            "description": "Battery bank instance (default '0'; named banks like 'house' also work).",
                         }
                     },
                 },
@@ -128,7 +128,7 @@ def build_server(client: SignalKClient) -> Server:
         elif name == "get_route":
             result = await get_route(client)
         elif name == "battery_state":
-            result = await battery_state(client, bank=args.get("bank", "house"))
+            result = await battery_state(client, bank=args.get("bank", "0"))
         elif name == "depth_state":
             result = await depth_state(client)
         elif name == "get_local_time":
