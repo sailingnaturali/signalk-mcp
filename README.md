@@ -21,34 +21,16 @@ See [SPEC.md](SPEC.md) for the response contract.
 
 ## Why a separate server?
 
-There is already a capable SignalK MCP server —
 [VesselSense/signalk-mcp-server](https://github.com/VesselSense/signalk-mcp-server)
-(TypeScript, MIT). It's well-built and worth a look. We built a separate
-server rather than contributing to it because the two have genuinely
-different design goals:
+already does SignalK-on-MCP well: one `execute_code` tool, the agent writes its
+own queries — a great fit for frontier models. `signalk-mcp` makes the opposite
+bet: discrete named tools with TTS-safe `display` strings, tuned for voice-first
+and small local models, where reliability and a speech contract matter more than
+query flexibility. Neither is universally better — pick the surface for the agent
+you actually run.
 
-- **VesselSense exposes a single `execute_code` tool** — the agent writes
-  JavaScript that runs in a sandboxed V8 isolate and queries SignalK. That's
-  an excellent fit for a large frontier model doing complex, multi-step
-  queries where token efficiency matters.
-- **`signalk-mcp` exposes discrete, named tools** (`read_sensor`,
-  `battery_state`, …) and is optimized for a **voice-first, local model**.
-  Our target runtime is a small model (Hermes 3 8B) driving a text-to-speech
-  front-end on a boat. For that, two things matter more than token
-  efficiency:
-  1. **Reliability.** A named tool with one argument is far more robust than
-     asking a small local model to write correct JavaScript for "what's my
-     battery?"
-  2. **A speech contract.** Every value carries a `display` string the agent
-     can speak verbatim — spelled-out units (`"knots"`, not `"kn"`), cardinal
-     lat/lon, no symbols a TTS engine mispronounces. See
-     [SPEC.md](SPEC.md#tts-protection-rule).
-
-Neither approach is universally better — they're tuned for different agents.
-If you're driving SignalK with a frontier model and want maximum query
-flexibility, VesselSense is likely the better choice. If you want simple,
-reliable, speakable tools for a local or voice-first agent, that's what this
-server is for.
+Full comparison, including the failure modes:
+[Discrete tools vs execute_code](https://engineering.sailingnaturali.com/discrete-tools-vs-execute-code-mcp-for-voice-agents/).
 
 ## Installation
 
