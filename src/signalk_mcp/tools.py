@@ -6,6 +6,7 @@ matching the contract in SPEC.md.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import math
 import zoneinfo
@@ -125,7 +126,10 @@ async def get_local_time(client: SignalKClient) -> dict:
         logger.warning("get_local_time: failed to fetch position (%s); falling back to UTC", exc)
 
     if lat is not None and lon is not None:
-        tz_name = _get_timezone_finder().timezone_at(lat=lat, lng=lon)
+        # ~50 MB shapefile lookup (and first-call construction): off the event
+        # loop so in-flight tool calls don't stall behind it (R6).
+        tz_name = await asyncio.to_thread(
+            lambda: _get_timezone_finder().timezone_at(lat=lat, lng=lon))
         if tz_name:
             tz = zoneinfo.ZoneInfo(tz_name)
             now_local = now_utc.astimezone(tz)
@@ -200,7 +204,8 @@ async def battery_state(client: SignalKClient, bank: str = "0") -> dict:
     """
     validate_path_segment(bank, "bank")
     raw = await client.get_value(f"electrical.batteries.{bank}")
-    soc_obj = raw.get("capacity", {}).get("stateOfCharge", {}) or {}
+    # `or {}` on capacity too: a scalar/null leaf must not AttributeError.
+    soc_obj = ((raw.get("capacity") or {}).get("stateOfCharge") or {})
     voltage_obj = raw.get("voltage", {}) or {}
     current_obj = raw.get("current", {}) or {}
 
@@ -342,7 +347,9 @@ async def get_active_alarms(client: SignalKClient) -> dict:
     """
     tree = await client.get_notifications()
     rows = _flatten_alarms(tree)
-    rows.sort(key=lambda r: _ALARM_SEVERITY.get(r["state"], 99))
+    # Normalize case so a capitalized/custom state keeps the worst-first
+    # guarantee that explain_notification consumers rely on.
+    rows.sort(key=lambda r: _ALARM_SEVERITY.get(str(r["state"]).lower(), 99))
     return {"alarms": rows}
 
 

@@ -15,6 +15,7 @@ import mcp.types as types
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
 
+from signalk_mcp import tools
 from signalk_mcp.client import SignalKClient
 from signalk_mcp.tools import (
     battery_state,
@@ -124,7 +125,7 @@ def build_server(client: SignalKClient) -> Server:
         if name == "get_active_alarms":
             result = await get_active_alarms(client)
         elif name == "read_sensor":
-            result = await read_sensor(client, args["path"])
+            result = await read_sensor(client, args.get("path", ""))
         elif name == "get_route":
             result = await get_route(client)
         elif name == "battery_state":
@@ -150,6 +151,10 @@ def main() -> None:
     server = build_server(client)
 
     async def _run() -> None:
+        # Warm the ~50 MB TimezoneFinder off-thread so the first
+        # get_local_time call doesn't pay construction on the event loop.
+        warmup = asyncio.create_task(asyncio.to_thread(tools._get_timezone_finder))
+        warmup.add_done_callback(lambda t: t.exception())   # never unraised
         try:
             async with stdio_server() as (read_stream, write_stream):
                 await server.run(

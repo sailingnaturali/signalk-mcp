@@ -53,3 +53,19 @@ async def test_battery_state_defaults_to_instance_zero():
 
     assert result["bank"] == "0"
     assert result["soc_fraction"] == 0.91
+
+
+@respx.mock
+async def test_battery_state_tolerates_scalar_capacity_leaf():
+    # A scalar (or null) capacity leaf must not AttributeError the tool.
+    respx.get(
+        "http://signalk-test:3000/signalk/v1/api/vessels/self/electrical/batteries/0"
+    ).mock(return_value=httpx.Response(200, json={
+        "capacity": None,
+        "voltage": {"value": 12.9, "timestamp": "2026-05-14T18:00:00Z"},
+    }))
+    client = SignalKClient("http://signalk-test:3000")
+    out = await battery_state(client, bank="0")
+    assert out["soc_fraction"] is None
+    assert out["voltage"] == 12.9
+    await client.aclose()

@@ -61,3 +61,45 @@ async def test_get_route_raises_when_no_active_route():
 
     with pytest.raises(ValueError, match="No active route"):
         await get_route(client)
+
+
+@respx.mock
+async def test_get_route_rejects_traversal_shaped_href():
+    # The href comes from the vessel's own server, but it reaches a URL sink —
+    # validate like every other segment (fleet conventions R5).
+    respx.get(
+        "http://signalk-test:3000/signalk/v1/api/vessels/self/navigation/courseGreatCircle/activeRoute"
+    ).mock(return_value=httpx.Response(
+        200, json={"href": {"value": "/resources/../../skServer/secrets"}}))
+    client = SignalKClient("http://signalk-test:3000")
+    with pytest.raises(ValueError, match="href"):
+        await get_route(client)
+    await client.aclose()
+
+
+@respx.mock
+async def test_get_route_rejects_protocol_relative_href():
+    respx.get(
+        "http://signalk-test:3000/signalk/v1/api/vessels/self/navigation/courseGreatCircle/activeRoute"
+    ).mock(return_value=httpx.Response(
+        200, json={"href": {"value": "//evil.example/resources/routes/r-1"}}))
+    client = SignalKClient("http://signalk-test:3000")
+    with pytest.raises(ValueError, match="href"):
+        await get_route(client)
+    await client.aclose()
+
+
+@respx.mock
+async def test_get_route_stale_href_returns_empty_route_not_error():
+    # 404 = absent, the client's own contract — a stale href must not raise.
+    respx.get(
+        "http://signalk-test:3000/signalk/v1/api/vessels/self/navigation/courseGreatCircle/activeRoute"
+    ).mock(return_value=httpx.Response(
+        200, json={"href": {"value": "/resources/routes/deleted"}}))
+    respx.get(
+        "http://signalk-test:3000/signalk/v1/api/resources/routes/deleted"
+    ).mock(return_value=httpx.Response(404))
+    client = SignalKClient("http://signalk-test:3000")
+    out = await get_route(client)
+    assert out["waypoints"] == []
+    await client.aclose()

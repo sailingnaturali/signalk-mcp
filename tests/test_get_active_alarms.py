@@ -79,3 +79,21 @@ async def test_get_active_alarms_skips_value_without_state():
     result = await get_active_alarms(_client())
     paths = {a["path"] for a in result["alarms"]}
     assert paths == {"electrical.batteries.house.voltage"}  # state-less leaf excluded
+
+
+@respx.mock
+async def test_alarm_state_case_normalized_for_severity_sort():
+    # A capitalized/custom state must not silently sort worst-last and break
+    # the worst-first guarantee feeding explain_notification.
+    respx.get(
+        "http://signalk-test:3000/signalk/v1/api/vessels/self/notifications"
+    ).mock(return_value=httpx.Response(200, json={
+        "mob": {"value": {"state": "Emergency", "message": "MOB!",
+                          "timestamp": "t2"}},
+        "engine": {"value": {"state": "warn", "message": "warm",
+                             "timestamp": "t1"}},
+    }))
+    client = SignalKClient("http://signalk-test:3000")
+    out = await get_active_alarms(client)
+    assert [a["path"] for a in out["alarms"]] == ["mob", "engine"]
+    await client.aclose()

@@ -7,6 +7,8 @@ import re
 import httpx
 
 _PATH_RE = re.compile(r"^[A-Za-z0-9._-]+$")
+# Resource hrefs from the server's own payloads still reach a URL sink (R5).
+_HREF_RE = re.compile(r"^/resources/[A-Za-z0-9._/-]+$")
 
 
 def validate_path_segment(segment: str, label: str = "path") -> None:
@@ -78,9 +80,19 @@ class SignalKClient:
         return resp.json()
 
     async def get_resource(self, href: str) -> dict:
-        """Fetch a resource by its SignalK API href (e.g. ``/resources/routes/r-1``)."""
+        """Fetch a resource by its SignalK API href (e.g. ``/resources/routes/r-1``).
+
+        The href comes from the vessel's own server, but it still reaches a URL
+        sink — validate like every other segment (no ``..``, no ``//host``).
+        A 404 (stale/deleted href) returns ``{}`` — the same "absent is not a
+        failure" rule as the rest of the client.
+        """
+        if not _HREF_RE.match(href) or ".." in href:
+            raise ValueError(f"invalid resource href: {href!r}")
         url = f"{self.base_url}/signalk/v1/api{href}"
         resp = await self._http.get(url)
+        if resp.status_code == 404:
+            return {}
         resp.raise_for_status()
         return resp.json()
 
