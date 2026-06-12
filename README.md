@@ -6,7 +6,7 @@ Part of the [Naturali](https://sailingnaturali.com) open-source boat agent stack
 
 ## What it does
 
-Wraps a SignalK server (REST + WebSocket) and exposes the most useful marine data points as MCP tools that any compatible agent runtime (Hermes Agent, Claude Code, etc.) can call.
+Wraps a SignalK server (REST + WebSocket) and exposes the most useful marine data points as MCP tools that any compatible agent runtime (Poseidon, Claude Code, etc.) can call.
 
 ### Tools provided
 

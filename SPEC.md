@@ -76,7 +76,7 @@ timestamp: None}` and `read_sensor` returns `value=None, display=None`. It
 does **not** raise.
 
 This is deliberate. Agent runtimes commonly run a per-tool circuit breaker
-(e.g. Hermes trips after 3 consecutive `same_tool` failures). A smaller model
+(e.g. Poseidon trips after 3 consecutive `same_tool` failures). A smaller model
 that fans out across several guessed paths — `headingTrue`, `headingMagnetic`,
 etc. on a vessel with no compass — would otherwise generate a burst of 404s,
 each counted as a tool failure, tripping the breaker and blocking the *valid*
@@ -192,4 +192,4 @@ timestamps (see Out of scope above).
 These three were harvested from a review of VesselSense's
 `signalk-mcp-server` (see `planning/references/vesselsense-signalk-mcp-comparison.md`).
 Their `execute_code` model was deliberately *not* adopted — it discards the
-TTS contract and is a reliability risk for the local Hermes 3 8B voice layer.
+TTS contract and is a reliability risk for a local voice layer.
