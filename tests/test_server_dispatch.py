@@ -98,6 +98,57 @@ async def test_list_tools_includes_all_tools(server) -> None:
     assert names == {"read_sensor", "get_route", "battery_state", "depth_state", "get_local_time", "list_paths", "get_active_alarms"}
 
 
+async def test_tool_descriptions_disambiguate(server) -> None:
+    """Curated tools must claim their natural-language trigger and read_sensor must defer.
+
+    Regression guard for the benchmark failure where 8-10B models (qwen3.5, hermes3)
+    answered 'what's my depth right now?' by calling the GENERIC read_sensor on a raw
+    transducer path instead of the curated depth_state, which encodes the safety-correct
+    under-keel logic. read_sensor's description must point at the dedicated tools, and each
+    curated tool must assert it is preferred over read_sensor.
+    """
+    from mcp.types import ListToolsRequest
+
+    handler = server.request_handlers[ListToolsRequest]
+    result = await handler(ListToolsRequest(method="tools/list"))
+    descs = {t.name: t.description for t in result.root.tools}
+
+    # read_sensor: the generic fallback must steer common readings to the dedicated tools.
+    rs = descs["read_sensor"]
+    rs_lower = rs.lower()
+    assert "generic" in rs_lower or "fallback" in rs_lower, (
+        "read_sensor description must establish it as the generic/fallback reader"
+    )
+    for dedicated in ("depth_state", "battery_state", "get_active_alarms"):
+        assert dedicated in rs, (
+            f"read_sensor description must point at {dedicated} for that reading"
+        )
+
+    # depth_state: owns the depth question and must warn off the raw read_sensor path.
+    ds = descs["depth_state"]
+    assert "under the keel" in ds.lower() or "under-keel" in ds.lower(), (
+        "depth_state description must claim the under-keel trigger"
+    )
+    assert "read_sensor" in ds, (
+        "depth_state description must tell the model NOT to read depth via read_sensor"
+    )
+
+    # battery_state: owns the battery question and is preferred over read_sensor.
+    bs = descs["battery_state"]
+    assert "state of charge" in bs.lower() or "battery" in bs.lower(), (
+        "battery_state description must claim the battery trigger"
+    )
+    assert "read_sensor" in bs, (
+        "battery_state description must tell the model NOT to read battery via read_sensor"
+    )
+
+    # get_active_alarms: owns the 'anything wrong?' question and is preferred over read_sensor.
+    ga = descs["get_active_alarms"]
+    assert "read_sensor" in ga, (
+        "get_active_alarms description must steer the model away from polling read_sensor"
+    )
+
+
 @respx.mock
 async def test_dispatch_list_paths(server) -> None:
     respx.get(
