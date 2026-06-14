@@ -44,16 +44,27 @@ def build_server(client: SignalKClient) -> Server:
             types.Tool(
                 name="get_active_alarms",
                 description=(
-                    "Active SignalK notifications (alarms/warnings), most severe first. "
-                    "Use for 'anything wrong?' / 'systems check'. Each entry's `path` is "
-                    "the monitored SignalK path — pass it to vessel-knowledge "
+                    "Use this for 'anything wrong?' / 'systems check' / 'any alarms?' — "
+                    "returns active SignalK notifications (alarms/warnings), most severe "
+                    "first. Do NOT poll individual paths via read_sensor to check for "
+                    "trouble; this surfaces every active notification at once. Each entry's "
+                    "`path` is the monitored SignalK path — pass it to vessel-knowledge "
                     "explain_notification to triage. Empty list means all systems nominal."
                 ),
                 inputSchema={"type": "object", "properties": {}},
             ),
             types.Tool(
                 name="read_sensor",
-                description="Read a SignalK path's current value and timestamp.",
+                description=(
+                    "GENERIC fallback reader for any SignalK path's current value and "
+                    "timestamp. Prefer the dedicated tools for common readings — they "
+                    "return the safety-correct path with proper labelling: for depth / "
+                    "under-keel clearance use depth_state; for battery state of charge / "
+                    "voltage use battery_state; for alarms and warnings use "
+                    "get_active_alarms. Use read_sensor ONLY for paths without a dedicated "
+                    "tool (e.g. 'environment.wind.speedTrue', 'navigation.speedOverGround'). "
+                    "Reading a raw depth path here is NOT under-keel depth — use depth_state."
+                ),
                 inputSchema={
                     "type": "object",
                     "properties": {
@@ -72,7 +83,12 @@ def build_server(client: SignalKClient) -> Server:
             ),
             types.Tool(
                 name="battery_state",
-                description="Get state of charge, voltage, current for a battery bank.",
+                description=(
+                    "Use this for 'what's our battery' / 'state of charge' / 'how's the "
+                    "house bank' — returns state of charge, voltage, and current for a "
+                    "battery bank with correct labelling and units. Do NOT read battery "
+                    "values via read_sensor; this tool resolves the right bank paths for you."
+                ),
                 inputSchema={
                     "type": "object",
                     "properties": {
@@ -87,10 +103,13 @@ def build_server(client: SignalKClient) -> Server:
             types.Tool(
                 name="depth_state",
                 description=(
-                    "Water depth with under-keel clearance first. Use this for "
-                    "'how's our depth?' and 'how close are we to running aground?' — "
-                    "below_keel_m IS the clearance under the hull (no draft math needed). "
-                    "Do not guess depth paths or compute clearance yourself; call this."
+                    "Use this for 'what's our depth?' / 'how much under the keel?' / "
+                    "'how close are we to running aground?' — returns water depth with "
+                    "under-keel clearance first. below_keel_m IS the clearance under the "
+                    "hull (no draft math needed). Do NOT read depth via read_sensor: the "
+                    "raw transducer path (environment.depth.belowTransducer) is NOT "
+                    "under-keel depth and will mislead. Do not guess depth paths or "
+                    "compute clearance yourself; call this."
                 ),
                 inputSchema={"type": "object", "properties": {}},
             ),
