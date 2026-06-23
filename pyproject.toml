@@ -1,6 +1,6 @@
 [project]
 name = "signalk-mcp"
-version = "0.6.2"
+version = "0.6.3"
 description = "MCP server exposing SignalK marine data as agent tools"
 readme = "README.md"
 authors = [
@@ -10,9 +10,13 @@ requires-python = ">=3.11"
 dependencies = [
     "httpx>=0.28.1",
     "mcp>=1.27.1",
+    "naturali-mcp-netutil>=0.1.0",
     "pydantic>=2.13.4",
     "timezonefinder>=8.2.4",
 ]
+
+[tool.uv.sources]
+naturali-mcp-netutil = { git = "https://github.com/sailingnaturali/naturali-mcp-netutil", tag = "v0.1.0" }
 
 [project.scripts]
 signalk-mcp = "signalk_mcp.server:main"

@@ -352,6 +352,11 @@ wheels = [
 ]
 
 [[package]]
+name = "naturali-mcp-netutil"
+version = "0.1.0"
+source = { git = "https://github.com/sailingnaturali/naturali-mcp-netutil?tag=v0.1.0#8b4d28622f310b2eb7f55ae9c7dd87529a967730" }
+
+[[package]]
 name = "numpy"
 version = "2.4.4"
 source = { registry = "https://pypi.org/simple" }
@@ -813,11 +818,12 @@ wheels = [
 
 [[package]]
 name = "signalk-mcp"
-version = "0.6.1"
+version = "0.6.2"
 source = { editable = "." }
 dependencies = [
     { name = "httpx" },
     { name = "mcp" },
+    { name = "naturali-mcp-netutil" },
     { name = "pydantic" },
     { name = "timezonefinder" },
 ]
@@ -833,6 +839,7 @@ dev = [
 requires-dist = [
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "mcp", specifier = ">=1.27.1" },
+    { name = "naturali-mcp-netutil", git = "https://github.com/sailingnaturali/naturali-mcp-netutil?tag=v0.1.0" },
     { name = "pydantic", specifier = ">=2.13.4" },
     { name = "timezonefinder", specifier = ">=8.2.4" },
 ]

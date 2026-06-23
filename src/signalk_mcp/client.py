@@ -3,41 +3,13 @@
 from __future__ import annotations
 
 import re
-import socket
-from urllib.parse import urlsplit, urlunsplit
 
 import httpx
+from naturali_mcp_netutil import resolve_local_host
 
 _PATH_RE = re.compile(r"^[A-Za-z0-9._-]+$")
 # Resource hrefs from the server's own payloads still reach a URL sink (R5).
 _HREF_RE = re.compile(r"^/resources/[A-Za-z0-9._/-]+$")
-
-
-def _resolve_local_host(base_url: str) -> str:
-    """Resolve a ``.local`` (mDNS) host to its IPv4 address at construction time.
-
-    httpx's async connect hangs on macOS ``.local`` hostnames: getaddrinfo
-    offers an IPv6 candidate first and Happy-Eyeballs waits out the full connect
-    timeout before falling back to IPv4. Forcing IPv4 resolution via the system
-    resolver (which does handle mDNS) and connecting to the IP sidesteps the
-    hang. Non-``.local`` hosts and resolution failures are returned unchanged so
-    httpx still gets its normal shot.
-    """
-    parts = urlsplit(base_url)
-    host = parts.hostname
-    if not host or not host.endswith(".local"):
-        return base_url
-    try:
-        infos = socket.getaddrinfo(host, parts.port, socket.AF_INET,
-                                   socket.SOCK_STREAM)
-    except (socket.gaierror, OSError):
-        return base_url
-    if not infos:
-        return base_url
-    ip = infos[0][4][0]
-    netloc = ip if parts.port is None else f"{ip}:{parts.port}"
-    return urlunsplit((parts.scheme, netloc, parts.path, parts.query,
-                       parts.fragment))
 
 
 def validate_path_segment(segment: str, label: str = "path") -> None:
@@ -56,7 +28,7 @@ class SignalKClient:
     """
 
     def __init__(self, base_url: str) -> None:
-        self.base_url = _resolve_local_host(base_url.rstrip("/"))
+        self.base_url = resolve_local_host(base_url.rstrip("/"))
         self._http = httpx.AsyncClient(timeout=5.0)
 
     async def get_value(self, path: str) -> dict:
