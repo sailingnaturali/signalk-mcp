@@ -305,37 +305,46 @@ _ALARM_SEVERITY = {"emergency": 0, "alarm": 1, "warn": 2, "alert": 3}
 _INACTIVE_STATES = {"normal", "nominal"}
 
 
-def _flatten_alarms(node: object, prefix: str = "") -> list[dict]:
-    """Walk a SignalK notifications subtree, emitting one row per ACTIVE alarm.
+def _walk_leaves(node: object, emit, prefix: str = "") -> list[dict]:
+    """Walk a SignalK tree, calling ``emit(prefix, leaf)`` for each value-bearing
+    leaf (a dict with a ``value`` key) and returning the concatenated rows.
 
-    A leaf is a dict with a ``value`` key; the notification payload is that
-    ``value`` (a dict with ``state``/``message``/``timestamp``). A null value is
-    a cleared alarm. States ``normal``/``nominal`` are not active. ``prefix`` is
-    already free of the ``notifications.`` prefix because the caller fetched the
-    subtree endpoint.
+    A leaf doesn't recurse; branches recurse with a dotted prefix, skipping
+    metadata keys. ``emit`` returns a list of rows (possibly empty to drop a leaf).
     """
     if not isinstance(node, dict):
         return []
     if "value" in node:
-        val = node.get("value")
-        if not isinstance(val, dict):
-            return []
-        state = val.get("state")
-        if state is None or state in _INACTIVE_STATES:
-            return []
-        return [{
-            "path": prefix,
-            "state": state,
-            "message": val.get("message"),
-            "timestamp": val.get("timestamp") or node.get("timestamp"),
-        }]
+        return emit(prefix, node)
     rows: list[dict] = []
     for key, child in node.items():
         if key in _NON_PATH_KEYS:
             continue
         child_prefix = f"{prefix}.{key}" if prefix else key
-        rows.extend(_flatten_alarms(child, child_prefix))
+        rows.extend(_walk_leaves(child, emit, child_prefix))
     return rows
+
+
+def _emit_alarm(prefix: str, node: dict) -> list[dict]:
+    """Emit one row for an ACTIVE alarm leaf.
+
+    The notification payload is the leaf's ``value`` (a dict with
+    ``state``/``message``/``timestamp``). A null value is a cleared alarm; states
+    ``normal``/``nominal`` are not active. ``prefix`` is already free of the
+    ``notifications.`` prefix because the caller fetched the subtree endpoint.
+    """
+    val = node.get("value")
+    if not isinstance(val, dict):
+        return []
+    state = val.get("state")
+    if state is None or state in _INACTIVE_STATES:
+        return []
+    return [{
+        "path": prefix,
+        "state": state,
+        "message": val.get("message"),
+        "timestamp": val.get("timestamp") or node.get("timestamp"),
+    }]
 
 
 async def get_active_alarms(client: SignalKClient) -> dict:
@@ -346,32 +355,18 @@ async def get_active_alarms(client: SignalKClient) -> dict:
     vessel-knowledge's ``explain_notification``. Empty list means all clear.
     """
     tree = await client.get_notifications()
-    rows = _flatten_alarms(tree)
+    rows = _walk_leaves(tree, _emit_alarm)
     # Normalize case so a capitalized/custom state keeps the worst-first
     # guarantee that explain_notification consumers rely on.
     rows.sort(key=lambda r: _ALARM_SEVERITY.get(str(r["state"]).lower(), 99))
     return {"alarms": rows}
 
 
-def _flatten_paths(node: object, prefix: str = "") -> list[dict]:
-    """Walk a SignalK tree, emitting one row per value-bearing leaf.
-
-    A dict containing a ``value`` key is a leaf path (don't recurse into it);
-    anything else is a branch we recurse into, skipping metadata keys. ``units``
-    and ``description`` come from the leaf's ``meta`` (``None`` when absent).
-    """
-    if not isinstance(node, dict):
-        return []
-    if "value" in node:
-        meta = node.get("meta") or {}
-        return [{"path": prefix, "units": meta.get("units"), "description": meta.get("description")}]
-    rows: list[dict] = []
-    for key, child in node.items():
-        if key in _NON_PATH_KEYS:
-            continue
-        child_prefix = f"{prefix}.{key}" if prefix else key
-        rows.extend(_flatten_paths(child, child_prefix))
-    return rows
+def _emit_path(prefix: str, node: dict) -> list[dict]:
+    """Emit one row per value-bearing leaf. ``units``/``description`` come from
+    the leaf's ``meta`` (``None`` when absent)."""
+    meta = node.get("meta") or {}
+    return [{"path": prefix, "units": meta.get("units"), "description": meta.get("description")}]
 
 
 async def list_paths(client: SignalKClient, prefix: str | None = None) -> dict:
@@ -381,7 +376,7 @@ async def list_paths(client: SignalKClient, prefix: str | None = None) -> dict:
     by path. ``prefix`` filters to paths starting with that string.
     """
     tree = await client.get_self_tree()
-    rows = _flatten_paths(tree)
+    rows = _walk_leaves(tree, _emit_path)
     if prefix:
         rows = [r for r in rows if r["path"].startswith(prefix)]
     rows.sort(key=lambda r: r["path"])
