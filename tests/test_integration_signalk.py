@@ -3,7 +3,7 @@
 Set SIGNALK_TEST_URL to enable (skipped otherwise).
 
 Usage:
-    SIGNALK_TEST_URL=http://naturalaspi.local:3000 uv run pytest tests/test_integration_signalk.py -v
+    SIGNALK_TEST_URL=http://naturalaspi:3000 uv run pytest tests/test_integration_signalk.py -v
 """
 
 import os
