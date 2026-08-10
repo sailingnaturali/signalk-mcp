@@ -214,7 +214,10 @@ async def test_dispatch_depth_state_leads_with_the_rendered_sentence(server) -> 
 
     result = await _call_registered_tool(server, "depth_state", None)
 
-    # The sentence, verbatim - not JSON.
-    assert result.root.content[0].text == "36.2 metres under the keel, 37.6 metres total depth"
-    # The numbers survive for threshold reasoning, one deliberate step away.
-    assert result.root.structuredContent["below_keel_m"] == 36.2
+    text = result.root.content[0].text
+    # The sentence leads, verbatim, before any number the model could re-render from.
+    assert text.startswith("36.2 metres under the keel, 37.6 metres total depth")
+    # The numbers survive for threshold reasoning - just no longer read first.
+    assert '"below_keel_m": 36.2' in text
+    # display is not repeated inside the JSON tail.
+    assert text.count("metres under the keel") == 1
