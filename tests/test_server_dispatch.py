@@ -11,6 +11,8 @@ import httpx
 from signalk_mcp.client import SignalKClient
 from signalk_mcp.server import build_server
 
+_DEPTH_URL = "http://signalk-test:3000/signalk/v1/api/vessels/self/environment/depth"
+
 
 def _setup_position_mock() -> None:
     respx.get(
@@ -185,3 +187,34 @@ async def test_dispatch_get_active_alarms(server):
     payload = json.loads(result.root.content[0].text)
     assert payload["alarms"][0]["path"] == "propulsion.0.temperature"
     assert payload["alarms"][0]["state"] == "warn"
+
+
+@respx.mock
+async def test_dispatch_depth_state_leads_with_the_rendered_sentence(server) -> None:
+    """depth_state's text content IS the display sentence, not a JSON blob.
+
+    Prompt-level enforcement of the SOUL verbatim carve-out failed on both
+    DeepSeek V4 Flash and Sonnet (2026-08-10): handed `display` and the raw SI
+    fields in one JSON dump, with `display` last, both models reached for the raw
+    numbers and re-rendered them - dropping units and quoting a negative amperage.
+    The structural fix is to make the rendered sentence the tool's answer and put
+    the numbers in structuredContent, where a model has to reach for them
+    deliberately rather than trip over them first.
+    """
+    respx.get(_DEPTH_URL).mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "belowKeel": {"value": 36.2, "timestamp": "2026-08-10T10:00:00Z"},
+                "belowTransducer": {"value": 37.3, "timestamp": "2026-08-10T10:00:00Z"},
+                "belowSurface": {"value": 37.6, "timestamp": "2026-08-10T10:00:00Z"},
+            },
+        )
+    )
+
+    result = await _call_registered_tool(server, "depth_state", None)
+
+    # The sentence, verbatim - not JSON.
+    assert result.root.content[0].text == "36.2 metres under the keel, 37.6 metres total depth"
+    # The numbers survive for threshold reasoning, one deliberate step away.
+    assert result.root.structuredContent["below_keel_m"] == 36.2

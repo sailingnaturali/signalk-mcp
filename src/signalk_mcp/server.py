@@ -139,7 +139,9 @@ def build_server(client: SignalKClient) -> Server:
         ]
 
     @server.call_tool()
-    async def _call_tool(name: str, args: dict | None) -> list[types.TextContent]:
+    async def _call_tool(
+        name: str, args: dict | None
+    ) -> list[types.TextContent] | tuple[list[types.TextContent], dict]:
         args = args or {}
         if name == "get_active_alarms":
             result = await get_active_alarms(client)
@@ -157,6 +159,19 @@ def build_server(client: SignalKClient) -> Server:
             result = await list_paths(client, prefix=args.get("prefix"))
         else:
             raise ValueError(f"Unknown tool: {name}")
+
+        # PILOT (2026-08-10), depth_state only. Every other tool still returns one
+        # JSON dump, which is the bug: `display` sits BELOW the raw SI fields in that
+        # blob, so a model reading top-down meets `below_keel_m` first and re-renders
+        # from it. Asking the model not to - the SOUL verbatim carve-out - was tried
+        # and failed on both DeepSeek V4 Flash and Sonnet, which quote the rules back
+        # and then ignore them (infrastructure/docs/alert-path.md). So make the
+        # rendered sentence the answer and put the numbers in structuredContent,
+        # still there for threshold reasoning but one deliberate reach away.
+        # Deliberately NOT rolled out to the other six yet: depth_state alone means a
+        # single "depth and battery" ask A/Bs the two shapes in one reply.
+        if name == "depth_state" and isinstance(result, dict) and result.get("display"):
+            return [types.TextContent(type="text", text=result["display"])], result
 
         return [types.TextContent(type="text", text=json.dumps(result, indent=2))]
 
