@@ -2,6 +2,40 @@
 
 ## Unreleased
 
+## v0.7.0 — 2026-08-10
+
+### Added
+
+- **`sk` CLI** — the same `tools.py` functions the MCP server exposes, as a
+  shell command, for the contexts MCP cannot reach: ssh sessions on the boat
+  Pi, cron/launchd jobs, headless `claude -p`, non-MCP agents. Compact JSON on
+  stdout, identical in shape to the MCP tool results. Deliberately a dispatch
+  table over `tools.py` rather than its own formatting, so the two front ends
+  cannot drift.
+
+  ```bash
+  sk depth | sk battery | sk alarms | sk read environment.wind.speedTrue
+  ```
+
+  It is not a token optimization — benchmarking (see the MCP-vs-CLI measurement
+  in the planning repo) found the MCP surface cheaper than a Bash+CLI one,
+  because enabling the Bash tool costs more prompt than all seven MCP schemas
+  combined. It earns its place on reach, not cost.
+
+### Fixed
+
+- **`battery_state` returned all-nulls on a vessel with named banks.** The
+  default was `bank="0"` (the SignalK convention), but a vessel publishing
+  `electrical.batteries.house` made the bare tool answer "no battery data" on a
+  boat that was publishing battery data the whole time — an agent only got a
+  reading if the asker happened to say "house". With no bank named, `"0"` is
+  still tried first, then the vessel's own banks are discovered from the
+  `electrical.batteries` subtree (read off that same fetch, no second round
+  trip). An explicitly named bank is never second-guessed: answering about a
+  different battery than the one asked for is worse than answering "no data".
+  Several banks with no `house` among them stay ambiguous on purpose and come
+  back as `available_banks` — `start` and `house` are not interchangeable.
+
 ## v0.5.0 — 2026-06-04
 
 ### Added

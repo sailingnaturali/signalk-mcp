@@ -38,6 +38,19 @@ Full comparison, including the failure modes:
 uv tool install signalk-mcp
 ```
 
+Installing also puts **`sk`** on your PATH — the same tools as a shell command,
+for places an MCP client cannot go (ssh on the boat, cron, shell pipelines):
+
+```bash
+sk depth                 # below keel / transducer / surface
+sk battery [bank]        # state of charge, voltage, current
+sk alarms                # active notifications, worst first
+sk read <path>           # any SignalK path's current value
+sk paths [prefix]        # discover published paths
+```
+
+It prints compact JSON with values already converted to human units.
+
 ## Configuration
 
 Set the SignalK base URL via environment variable:
