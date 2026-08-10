@@ -196,30 +196,80 @@ def _battery_display(soc: float | None, voltage: float | None, current: float | 
     return ", ".join(parts) if parts else None
 
 
-async def battery_state(client: SignalKClient, bank: str = "0") -> dict:
+def _battery_readings(raw: dict) -> tuple[dict, dict, dict]:
+    """Pull the three reading objects out of a bank node.
+
+    ``or {}`` on each: a scalar/null leaf must not AttributeError.
+    """
+    return (
+        ((raw.get("capacity") or {}).get("stateOfCharge") or {}),
+        raw.get("voltage", {}) or {},
+        raw.get("current", {}) or {},
+    )
+
+
+def _has_readings(raw: dict) -> bool:
+    return any(obj.get("value") is not None for obj in _battery_readings(raw))
+
+
+async def _discover_banks(client: SignalKClient) -> dict[str, dict]:
+    """Banks under ``electrical.batteries`` that actually publish readings.
+
+    Returns the nodes, not just the names: the subtree fetch already carries
+    each bank's values, so the caller reads them straight off it instead of
+    paying a second round trip for data it has in hand.
+    """
+    tree = await client.get_value("electrical.batteries")
+    return {
+        key: node for key, node in tree.items()
+        if isinstance(node, dict) and _has_readings(node)
+    }
+
+
+async def battery_state(client: SignalKClient, bank: str | None = None) -> dict:
     """Return state of charge, voltage, current for a battery bank.
 
     ``bank`` is the SignalK instance key under ``electrical.batteries`` —
     conventionally numeric ("0"), but named banks ("house") work too.
-    """
-    validate_path_segment(bank, "bank")
-    raw = await client.get_value(f"electrical.batteries.{bank}")
-    # `or {}` on capacity too: a scalar/null leaf must not AttributeError.
-    soc_obj = ((raw.get("capacity") or {}).get("stateOfCharge") or {})
-    voltage_obj = raw.get("voltage", {}) or {}
-    current_obj = raw.get("current", {}) or {}
 
+    With no bank named, "0" is tried first (the SignalK convention) and, if it
+    publishes nothing, the vessel's own banks are discovered. This matters:
+    ours publishes ``electrical.batteries.house``, so the bare default used to
+    return all-nulls on a boat that was publishing battery data the whole time.
+    An explicitly named bank is never second-guessed — answering about a
+    different battery than the one asked for is worse than answering "no data".
+    """
+    requested = bank
+    resolved = bank if bank is not None else "0"
+    validate_path_segment(resolved, "bank")
+    raw = await client.get_value(f"electrical.batteries.{resolved}")
+
+    available: list[str] = []
+    if requested is None and not _has_readings(raw):
+        banks = await _discover_banks(client)
+        available = list(banks)
+        # Sole bank, or the conventional name. Several unnamed banks stay
+        # ambiguous on purpose — "start" and "house" are not interchangeable.
+        pick = available[0] if len(available) == 1 else next(
+            (b for b in available if b == "house"), None)
+        if pick:
+            resolved, raw = pick, banks[pick]
+
+    soc_obj, voltage_obj, current_obj = _battery_readings(raw)
     soc = soc_obj.get("value")
     voltage = voltage_obj.get("value")
     current = current_obj.get("value")
-    return {
-        "bank": bank,
+    result = {
+        "bank": resolved,
         "soc_fraction": soc,
         "voltage": voltage,
         "current": current,
         "display": _battery_display(soc, voltage, current),
         "timestamp": soc_obj.get("timestamp") or voltage_obj.get("timestamp") or current_obj.get("timestamp"),
     }
+    if soc is None and voltage is None and current is None and available:
+        result["available_banks"] = available
+    return result
 
 
 def _depth_display(
