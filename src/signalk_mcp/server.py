@@ -139,9 +139,7 @@ def build_server(client: SignalKClient) -> Server:
         ]
 
     @server.call_tool()
-    async def _call_tool(
-        name: str, args: dict | None
-    ) -> list[types.TextContent] | tuple[list[types.TextContent], dict]:
+    async def _call_tool(name: str, args: dict | None) -> list[types.TextContent]:
         args = args or {}
         if name == "get_active_alarms":
             result = await get_active_alarms(client)
@@ -159,25 +157,6 @@ def build_server(client: SignalKClient) -> Server:
             result = await list_paths(client, prefix=args.get("prefix"))
         else:
             raise ValueError(f"Unknown tool: {name}")
-
-        # PILOT (2026-08-10), depth_state only. The bug: `display` sits BELOW the raw
-        # SI fields in the JSON dump, so a model reading top-down meets `below_keel_m`
-        # first and re-renders from it, dropping units. Asking the model not to - the
-        # SOUL verbatim carve-out - failed on DeepSeek V4 Flash and Sonnet alike.
-        #
-        # Returning (content, structuredContent) was tried first and is a dead end on
-        # at least one client: OpenClaw renders structuredContent and DISCARDS the text
-        # content, so the sentence never reached the model and the payload was byte-for
-        # -byte the old one. Ordering inside a single text block is the only lever that
-        # survives both clients. Sentence first, numbers after, still available for
-        # threshold reasoning but no longer the first thing read.
-        #
-        # Deliberately NOT rolled out to the other six yet: depth_state alone means one
-        # "depth and battery" ask A/Bs this against the old shape in a single reply.
-        if name == "depth_state" and isinstance(result, dict) and result.get("display"):
-            rest = {k: v for k, v in result.items() if k != "display"}
-            text = f"{result['display']}\n\n{json.dumps(rest, indent=2)}"
-            return [types.TextContent(type="text", text=text)]
 
         return [types.TextContent(type="text", text=json.dumps(result, indent=2))]
 
