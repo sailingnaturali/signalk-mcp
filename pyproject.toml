@@ -20,6 +20,7 @@ naturali-mcp-netutil = { git = "https://github.com/sailingnaturali/naturali-mcp-
 
 [project.scripts]
 signalk-mcp = "signalk_mcp.server:main"
+sk = "signalk_mcp.cli:main"
 
 [build-system]
 requires = ["uv_build>=0.11.14,<0.12.0"]
