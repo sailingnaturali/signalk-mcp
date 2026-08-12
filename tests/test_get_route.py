@@ -21,7 +21,7 @@ async def test_get_route_returns_active_route_waypoints():
         )
     )
     respx.get(
-        "http://signalk-test:3000/signalk/v1/api/resources/routes/r-1"
+        "http://signalk-test:3000/signalk/v2/api/resources/routes/r-1"
     ).mock(
         return_value=httpx.Response(
             200,
@@ -97,7 +97,7 @@ async def test_get_route_stale_href_returns_empty_route_not_error():
     ).mock(return_value=httpx.Response(
         200, json={"href": {"value": "/resources/routes/deleted"}}))
     respx.get(
-        "http://signalk-test:3000/signalk/v1/api/resources/routes/deleted"
+        "http://signalk-test:3000/signalk/v2/api/resources/routes/deleted"
     ).mock(return_value=httpx.Response(404))
     client = SignalKClient("http://signalk-test:3000")
     out = await get_route(client)

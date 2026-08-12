@@ -90,7 +90,10 @@ class SignalKClient:
         """
         if not _HREF_RE.match(href) or ".." in href:
             raise ValueError(f"invalid resource href: {href!r}")
-        url = f"{self.base_url}/signalk/v1/api{href}"
+        # Resources moved to the v2 API in signalk-server 2.x — there is no
+        # /signalk/v1/api/resources route at all (it 404s), so provider-backed
+        # hrefs like /resources/routes/<id> only resolve under v2.
+        url = f"{self.base_url}/signalk/v2/api{href}"
         resp = await self._http.get(url)
         if resp.status_code == 404:
             return {}

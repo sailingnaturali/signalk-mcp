@@ -23,7 +23,7 @@ async def test_get_route_tolerates_elevation_in_coordinates():
     """GeoJSON allows [lon, lat, elev]; we must drop the elevation, not crash."""
     _mock_active_route_href()
     respx.get(
-        "http://signalk-test:3000/signalk/v1/api/resources/routes/r-1"
+        "http://signalk-test:3000/signalk/v2/api/resources/routes/r-1"
     ).mock(
         return_value=httpx.Response(
             200,
@@ -53,7 +53,7 @@ async def test_get_route_handles_feature_collection():
     """Some SignalK route resources use FeatureCollection with `features[0]`."""
     _mock_active_route_href()
     respx.get(
-        "http://signalk-test:3000/signalk/v1/api/resources/routes/r-1"
+        "http://signalk-test:3000/signalk/v2/api/resources/routes/r-1"
     ).mock(
         return_value=httpx.Response(
             200,
