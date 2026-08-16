@@ -40,13 +40,25 @@ class SignalKClient:
         tool failures (which can trip a client's consecutive-failure circuit
         breaker). Any other HTTP error (5xx, etc.) is a real fault and still
         raises.
+
+        The 404 result carries ``available: False`` to separate the two ways a
+        value can be absent: the vessel publishes no such path at all, versus it
+        publishes one whose current value happens to be null. Callers must keep
+        these apart — a path that has never published also has no timestamp, so
+        no staleness check can ever catch it, and an absent sensor read as a
+        merely quiet one is how a reading gets invented.
+
+        The flag is set only on 404, so read it as ``raw.get("available", True)``.
+        A 200 body is returned untouched because this method is also used to
+        fetch subtrees (``electrical.batteries``, ``environment.depth``), where
+        merging a key in would inject a phantom child alongside the real ones.
         """
         validate_path_segment(path, "path")
         url_path = path.replace(".", "/")
         url = f"{self.base_url}/signalk/v1/api/vessels/self/{url_path}"
         resp = await self._http.get(url)
         if resp.status_code == 404:
-            return {"value": None, "timestamp": None}
+            return {"value": None, "timestamp": None, "available": False}
         resp.raise_for_status()
         return resp.json()
 

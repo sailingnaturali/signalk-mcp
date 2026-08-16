@@ -334,17 +334,32 @@ async def depth_state(client: SignalKClient) -> dict:
     }
 
 
+_NOT_PUBLISHED = (
+    "This vessel does not publish {path}. There is no sensor behind it, so this "
+    "is not a zero, a calm reading, or a sensor that has gone quiet — there is "
+    "nothing to report. Say the boat does not have it rather than estimating."
+)
+
+
 async def read_sensor(client: SignalKClient, path: str) -> dict:
-    """Read a SignalK path and return its current value + display."""
+    """Read a SignalK path and return its current value + display.
+
+    ``available`` is False when the vessel publishes no such path. That case
+    carries no display and no unit — a unit on an absent path reads as a sensor
+    that exists and is merely quiet, which is the confusion this separates.
+    """
     raw = await client.get_value(path)
+    available = raw.get("available", True)
     value = raw.get("value")
     display, unit = _convert(path, value)
     return {
         "path": path,
+        "available": available,
         "value": value,
         "display": display,
         "unit": unit,
         "timestamp": raw.get("timestamp"),
+        "note": None if available else _NOT_PUBLISHED.format(path=path),
     }
 
 

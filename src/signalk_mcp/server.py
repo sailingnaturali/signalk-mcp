@@ -63,7 +63,12 @@ def build_server(client: SignalKClient) -> Server:
                     "voltage use battery_state; for alarms and warnings use "
                     "get_active_alarms. Use read_sensor ONLY for paths without a dedicated "
                     "tool (e.g. 'environment.wind.speedTrue', 'navigation.speedOverGround'). "
-                    "Reading a raw depth path here is NOT under-keel depth — use depth_state."
+                    "Reading a raw depth path here is NOT under-keel depth — use depth_state. "
+                    "If the result has available=false, this vessel has no such sensor: report "
+                    "that it does not have it. Do NOT treat it as zero, as calm, or as a sensor "
+                    "that is temporarily quiet, and do not substitute a forecast or an estimate "
+                    "for it. available=true with a null value is the different case — the sensor "
+                    "exists and is not reporting right now."
                 ),
                 inputSchema={
                     "type": "object",
