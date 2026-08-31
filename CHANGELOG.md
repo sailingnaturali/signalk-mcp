@@ -2,6 +2,28 @@
 
 ## Unreleased
 
+## v0.8.0 — 2026-08-31
+
+### Changed
+
+- **MCP SDK v2** — migrated to `mcp>=2.1`, the SDK line that speaks the
+  stateless 2026-07-28 MCP spec revision (`server/discover`, per-request
+  version/capabilities, `resultType`). Handlers moved from the removed
+  decorator API to constructor `on_list_tools`/`on_call_tool` params. Tool
+  failures (unknown tool, no active route, SignalK unreachable) are caught in
+  the handler and returned as `is_error` tool results so they stay visible to
+  the calling LLM — the v2 SDK would otherwise surface them as protocol
+  errors the model never sees.
+- Tool results now also carry `structuredContent` alongside the JSON text.
+- Server reports its own package version (previously the SDK filled this in;
+  under v2 it would have been blank). Dropped the stale, unused
+  `__init__.__version__`.
+
+### Fixed
+
+- Clean shutdown no longer prints a `CancelledError` traceback when the
+  TimezoneFinder warmup task is cancelled mid-flight.
+
 ## v0.7.0 — 2026-08-10
 
 ### Added

@@ -1,5 +1,5 @@
-"""End-to-end dispatcher test: invoke each tool through the MCP server's
-list_tools / call_tool registration to catch name typos and arg-shape drift."""
+"""End-to-end dispatcher test: invoke each tool through the server's
+list_tools / call_tool handlers to catch name typos and arg-shape drift."""
 
 import json
 import os
@@ -9,7 +9,7 @@ import respx
 import httpx
 
 from signalk_mcp.client import SignalKClient
-from signalk_mcp.server import build_server
+from signalk_mcp.server import build_server, handle_call_tool, handle_list_tools
 
 
 def _setup_position_mock() -> None:
@@ -24,43 +24,38 @@ def _setup_position_mock() -> None:
 
 
 @pytest.fixture
-async def server():
+async def client():
     client = SignalKClient(base_url="http://signalk-test:3000")
     try:
-        yield build_server(client)
+        # Constructing the server here keeps registration itself under test.
+        build_server(client)
+        yield client
     finally:
         await client.aclose()
 
 
-async def _call_registered_tool(server, name: str, args: dict | None):
-    """Pull the registered call_tool handler off the server and invoke it."""
-    handler = server.request_handlers
-    # MCP Server registers handlers by request type; locate the call_tool by name.
-    # We rely on the server exposing _tool_handlers / call_tool via the SDK.
-    from mcp.types import CallToolRequest, CallToolRequestParams
+async def _call_registered_tool(client, name: str, args: dict | None):
+    """Invoke the call_tool handler the way the v2 dispatcher does."""
+    from mcp.types import CallToolRequestParams
 
-    req = CallToolRequest(
-        method="tools/call",
-        params=CallToolRequestParams(name=name, arguments=args),
+    return await handle_call_tool(
+        client, None, CallToolRequestParams(name=name, arguments=args)
     )
-    fn = handler[CallToolRequest]
-    result = await fn(req)
-    return result
 
 
 @respx.mock
-async def test_dispatch_read_sensor(server) -> None:
+async def test_dispatch_read_sensor(client) -> None:
     respx.get(
         "http://signalk-test:3000/signalk/v1/api/vessels/self/environment/wind/speedTrue"
     ).mock(return_value=httpx.Response(200, json={"value": 5.0, "timestamp": "2026-05-21T00:00:00Z"}))
 
-    result = await _call_registered_tool(server, "read_sensor", {"path": "environment.wind.speedTrue"})
-    payload = json.loads(result.root.content[0].text)
+    result = await _call_registered_tool(client, "read_sensor", {"path": "environment.wind.speedTrue"})
+    payload = json.loads(result.content[0].text)
     assert payload["value"] == 5.0
 
 
 @respx.mock
-async def test_dispatch_battery_state_defaults(server) -> None:
+async def test_dispatch_battery_state_defaults(client) -> None:
     """call_tool must accept arguments=None (some MCP clients omit it)."""
     respx.get(
         "http://signalk-test:3000/signalk/v1/api/vessels/self/electrical/batteries/0"
@@ -74,31 +69,27 @@ async def test_dispatch_battery_state_defaults(server) -> None:
             },
         )
     )
-    result = await _call_registered_tool(server, "battery_state", None)
-    payload = json.loads(result.root.content[0].text)
+    result = await _call_registered_tool(client, "battery_state", None)
+    payload = json.loads(result.content[0].text)
     assert payload["bank"] == "0"
 
 
 @respx.mock
-async def test_dispatch_get_local_time(server) -> None:
+async def test_dispatch_get_local_time(client) -> None:
     _setup_position_mock()
-    result = await _call_registered_tool(server, "get_local_time", {})
-    payload = json.loads(result.root.content[0].text)
+    result = await _call_registered_tool(client, "get_local_time", {})
+    payload = json.loads(result.content[0].text)
     assert "display" in payload
     assert "iana_timezone" in payload
 
 
-async def test_list_tools_includes_all_tools(server) -> None:
-    from mcp.types import ListToolsRequest
-
-    handler = server.request_handlers[ListToolsRequest]
-    req = ListToolsRequest(method="tools/list")
-    result = await handler(req)
-    names = {tool.name for tool in result.root.tools}
+async def test_list_tools_includes_all_tools(client) -> None:
+    result = await handle_list_tools(None, None)
+    names = {tool.name for tool in result.tools}
     assert names == {"read_sensor", "get_route", "battery_state", "depth_state", "get_local_time", "list_paths", "get_active_alarms"}
 
 
-async def test_tool_descriptions_disambiguate(server) -> None:
+async def test_tool_descriptions_disambiguate(client) -> None:
     """Curated tools must claim their natural-language trigger and read_sensor must defer.
 
     Regression guard for the benchmark failure where 8-10B models (qwen3.5, hermes3)
@@ -107,11 +98,8 @@ async def test_tool_descriptions_disambiguate(server) -> None:
     under-keel logic. read_sensor's description must point at the dedicated tools, and each
     curated tool must assert it is preferred over read_sensor.
     """
-    from mcp.types import ListToolsRequest
-
-    handler = server.request_handlers[ListToolsRequest]
-    result = await handler(ListToolsRequest(method="tools/list"))
-    descs = {t.name: t.description for t in result.root.tools}
+    result = await handle_list_tools(None, None)
+    descs = {t.name: t.description for t in result.tools}
 
     # read_sensor: the generic fallback must steer common readings to the dedicated tools.
     rs = descs["read_sensor"]
@@ -150,7 +138,7 @@ async def test_tool_descriptions_disambiguate(server) -> None:
 
 
 @respx.mock
-async def test_dispatch_list_paths(server) -> None:
+async def test_dispatch_list_paths(client) -> None:
     respx.get(
         "http://signalk-test:3000/signalk/v1/api/vessels/self/"
     ).mock(
@@ -168,20 +156,20 @@ async def test_dispatch_list_paths(server) -> None:
             },
         )
     )
-    result = await _call_registered_tool(server, "list_paths", {})
-    payload = json.loads(result.root.content[0].text)
+    result = await _call_registered_tool(client, "list_paths", {})
+    payload = json.loads(result.content[0].text)
     assert payload["count"] == 1
     assert payload["paths"][0]["path"] == "environment.depth.belowTransducer"
 
 
 @respx.mock
-async def test_dispatch_get_active_alarms(server):
+async def test_dispatch_get_active_alarms(client):
     respx.get(
         "http://signalk-test:3000/signalk/v1/api/vessels/self/notifications"
     ).mock(return_value=httpx.Response(200, json={
         "propulsion": {"0": {"temperature": {"value": {"state": "warn", "message": "hot"}}}}
     }))
-    result = await _call_registered_tool(server, "get_active_alarms", {})
-    payload = json.loads(result.root.content[0].text)
+    result = await _call_registered_tool(client, "get_active_alarms", {})
+    payload = json.loads(result.content[0].text)
     assert payload["alarms"][0]["path"] == "propulsion.0.temperature"
     assert payload["alarms"][0]["state"] == "warn"
