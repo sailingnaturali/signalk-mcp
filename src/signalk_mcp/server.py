@@ -10,9 +10,11 @@ import asyncio
 import json
 import logging
 import os
+from functools import partial
+from importlib.metadata import version
 
 import mcp.types as types
-from mcp.server import Server
+from mcp.server import Server, ServerRequestContext
 from mcp.server.stdio import stdio_server
 
 from signalk_mcp import tools
@@ -29,123 +31,129 @@ from signalk_mcp.tools import (
 
 logger = logging.getLogger(__name__)
 
+TOOLS = [
+    types.Tool(
+        name="get_active_alarms",
+        description=(
+            "Use this for 'anything wrong?' / 'systems check' / 'any alarms?' — "
+            "returns active SignalK notifications (alarms/warnings), most severe "
+            "first. Do NOT poll individual paths via read_sensor to check for "
+            "trouble; this surfaces every active notification at once. Each entry's "
+            "`path` is the monitored SignalK path — pass it to vessel-knowledge "
+            "explain_notification to triage. Empty list means all systems nominal."
+        ),
+        input_schema={"type": "object", "properties": {}},
+    ),
+    types.Tool(
+        name="read_sensor",
+        description=(
+            "GENERIC fallback reader for any SignalK path's current value and "
+            "timestamp. Prefer the dedicated tools for common readings — they "
+            "return the safety-correct path with proper labelling: for depth / "
+            "under-keel clearance use depth_state; for battery state of charge / "
+            "voltage use battery_state; for alarms and warnings use "
+            "get_active_alarms. Use read_sensor ONLY for paths without a dedicated "
+            "tool (e.g. 'environment.wind.speedTrue', 'navigation.speedOverGround'). "
+            "Reading a raw depth path here is NOT under-keel depth — use depth_state. "
+            "If the result has available=false, this vessel has no such sensor: report "
+            "that it does not have it. Do NOT treat it as zero, as calm, or as a sensor "
+            "that is temporarily quiet, and do not substitute a forecast or an estimate "
+            "for it. available=true with a null value is the different case — the sensor "
+            "exists and is not reporting right now."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "path": {
+                    "type": "string",
+                    "description": "SignalK dotted path (e.g. 'environment.wind.speedTrue').",
+                }
+            },
+            "required": ["path"],
+        },
+    ),
+    types.Tool(
+        name="get_route",
+        description="Get the currently active route with waypoints.",
+        input_schema={"type": "object", "properties": {}},
+    ),
+    types.Tool(
+        name="battery_state",
+        description=(
+            "Use this for 'what's our battery' / 'state of charge' / 'how's the "
+            "house bank' — returns state of charge, voltage, and current for a "
+            "battery bank with correct labelling and units. Do NOT read battery "
+            "values via read_sensor; this tool resolves the right bank paths for you."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "bank": {
+                    "type": "string",
+                    "default": "0",
+                    "description": "Battery bank instance. Omit it to let the tool find the vessel's bank (tries '0', then discovers named banks like 'house'). Only pass this to target a specific bank.",
+                }
+            },
+        },
+    ),
+    types.Tool(
+        name="depth_state",
+        description=(
+            "Use this for 'what's our depth?' / 'how much under the keel?' / "
+            "'how close are we to running aground?' — returns water depth with "
+            "under-keel clearance first. below_keel_m IS the clearance under the "
+            "hull (no draft math needed). Do NOT read depth via read_sensor: the "
+            "raw transducer path (environment.depth.belowTransducer) is NOT "
+            "under-keel depth and will mislead. Do not guess depth paths or "
+            "compute clearance yourself; call this."
+        ),
+        input_schema={"type": "object", "properties": {}},
+    ),
+    types.Tool(
+        name="get_local_time",
+        description="Get current time localized to the vessel's GPS position.",
+        input_schema={"type": "object", "properties": {}},
+    ),
+    types.Tool(
+        name="list_paths",
+        description=(
+            "Discover which SignalK paths this vessel publishes, with units and "
+            "descriptions. Call this before guessing a path name (depth is "
+            "'environment.depth.belowTransducer', not 'sensors.depth'). Optional "
+            "'prefix' filters results (e.g. 'navigation', 'environment.depth')."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "prefix": {
+                    "type": "string",
+                    "description": "Only return paths starting with this string.",
+                }
+            },
+        },
+    ),
+]
 
-def build_server(client: SignalKClient) -> Server:
-    """Construct and configure the MCP server with all tools registered.
 
-    The caller owns ``client`` and must close it on shutdown. One client is
-    shared across every tool call so httpx connection pooling works.
+async def handle_list_tools(
+    ctx: ServerRequestContext, params: types.PaginatedRequestParams | None
+) -> types.ListToolsResult:
+    return types.ListToolsResult(tools=TOOLS)
+
+
+async def handle_call_tool(
+    client: SignalKClient, ctx: ServerRequestContext, params: types.CallToolRequestParams
+) -> types.CallToolResult:
+    """Dispatch a tool call, returning failures as is_error results.
+
+    The v2 SDK no longer converts handler exceptions into error-flagged tool
+    results — an uncaught exception becomes a JSON-RPC protocol error the
+    calling LLM never sees. Catch everything here so 'No active route set' and
+    HTTP failures stay LLM-visible and self-correctable, as the spec directs.
     """
-    server = Server("signalk-mcp")
-
-    @server.list_tools()
-    async def _list_tools() -> list[types.Tool]:
-        return [
-            types.Tool(
-                name="get_active_alarms",
-                description=(
-                    "Use this for 'anything wrong?' / 'systems check' / 'any alarms?' — "
-                    "returns active SignalK notifications (alarms/warnings), most severe "
-                    "first. Do NOT poll individual paths via read_sensor to check for "
-                    "trouble; this surfaces every active notification at once. Each entry's "
-                    "`path` is the monitored SignalK path — pass it to vessel-knowledge "
-                    "explain_notification to triage. Empty list means all systems nominal."
-                ),
-                inputSchema={"type": "object", "properties": {}},
-            ),
-            types.Tool(
-                name="read_sensor",
-                description=(
-                    "GENERIC fallback reader for any SignalK path's current value and "
-                    "timestamp. Prefer the dedicated tools for common readings — they "
-                    "return the safety-correct path with proper labelling: for depth / "
-                    "under-keel clearance use depth_state; for battery state of charge / "
-                    "voltage use battery_state; for alarms and warnings use "
-                    "get_active_alarms. Use read_sensor ONLY for paths without a dedicated "
-                    "tool (e.g. 'environment.wind.speedTrue', 'navigation.speedOverGround'). "
-                    "Reading a raw depth path here is NOT under-keel depth — use depth_state. "
-                    "If the result has available=false, this vessel has no such sensor: report "
-                    "that it does not have it. Do NOT treat it as zero, as calm, or as a sensor "
-                    "that is temporarily quiet, and do not substitute a forecast or an estimate "
-                    "for it. available=true with a null value is the different case — the sensor "
-                    "exists and is not reporting right now."
-                ),
-                inputSchema={
-                    "type": "object",
-                    "properties": {
-                        "path": {
-                            "type": "string",
-                            "description": "SignalK dotted path (e.g. 'environment.wind.speedTrue').",
-                        }
-                    },
-                    "required": ["path"],
-                },
-            ),
-            types.Tool(
-                name="get_route",
-                description="Get the currently active route with waypoints.",
-                inputSchema={"type": "object", "properties": {}},
-            ),
-            types.Tool(
-                name="battery_state",
-                description=(
-                    "Use this for 'what's our battery' / 'state of charge' / 'how's the "
-                    "house bank' — returns state of charge, voltage, and current for a "
-                    "battery bank with correct labelling and units. Do NOT read battery "
-                    "values via read_sensor; this tool resolves the right bank paths for you."
-                ),
-                inputSchema={
-                    "type": "object",
-                    "properties": {
-                        "bank": {
-                            "type": "string",
-                            "default": "0",
-                            "description": "Battery bank instance. Omit it to let the tool find the vessel's bank (tries '0', then discovers named banks like 'house'). Only pass this to target a specific bank.",
-                        }
-                    },
-                },
-            ),
-            types.Tool(
-                name="depth_state",
-                description=(
-                    "Use this for 'what's our depth?' / 'how much under the keel?' / "
-                    "'how close are we to running aground?' — returns water depth with "
-                    "under-keel clearance first. below_keel_m IS the clearance under the "
-                    "hull (no draft math needed). Do NOT read depth via read_sensor: the "
-                    "raw transducer path (environment.depth.belowTransducer) is NOT "
-                    "under-keel depth and will mislead. Do not guess depth paths or "
-                    "compute clearance yourself; call this."
-                ),
-                inputSchema={"type": "object", "properties": {}},
-            ),
-            types.Tool(
-                name="get_local_time",
-                description="Get current time localized to the vessel's GPS position.",
-                inputSchema={"type": "object", "properties": {}},
-            ),
-            types.Tool(
-                name="list_paths",
-                description=(
-                    "Discover which SignalK paths this vessel publishes, with units and "
-                    "descriptions. Call this before guessing a path name (depth is "
-                    "'environment.depth.belowTransducer', not 'sensors.depth'). Optional "
-                    "'prefix' filters results (e.g. 'navigation', 'environment.depth')."
-                ),
-                inputSchema={
-                    "type": "object",
-                    "properties": {
-                        "prefix": {
-                            "type": "string",
-                            "description": "Only return paths starting with this string.",
-                        }
-                    },
-                },
-            ),
-        ]
-
-    @server.call_tool()
-    async def _call_tool(name: str, args: dict | None) -> list[types.TextContent]:
-        args = args or {}
+    args = params.arguments or {}
+    name = params.name
+    try:
         if name == "get_active_alarms":
             result = await get_active_alarms(client)
         elif name == "read_sensor":
@@ -162,10 +170,31 @@ def build_server(client: SignalKClient) -> Server:
             result = await list_paths(client, prefix=args.get("prefix"))
         else:
             raise ValueError(f"Unknown tool: {name}")
+    except Exception as exc:
+        logger.warning("tool %s failed: %s", name, exc)
+        return types.CallToolResult(
+            content=[types.TextContent(type="text", text=str(exc))],
+            is_error=True,
+        )
 
-        return [types.TextContent(type="text", text=json.dumps(result, indent=2))]
+    return types.CallToolResult(
+        content=[types.TextContent(type="text", text=json.dumps(result, indent=2))],
+        structured_content=result,
+    )
 
-    return server
+
+def build_server(client: SignalKClient) -> Server:
+    """Construct the MCP server with all tools registered.
+
+    The caller owns ``client`` and must close it on shutdown. One client is
+    shared across every tool call so httpx connection pooling works.
+    """
+    return Server(
+        "signalk-mcp",
+        version=version("signalk-mcp"),
+        on_list_tools=handle_list_tools,
+        on_call_tool=partial(handle_call_tool, client),
+    )
 
 
 def main() -> None:
@@ -178,7 +207,7 @@ def main() -> None:
         # Warm the ~50 MB TimezoneFinder off-thread so the first
         # get_local_time call doesn't pay construction on the event loop.
         warmup = asyncio.create_task(asyncio.to_thread(tools._get_timezone_finder))
-        warmup.add_done_callback(lambda t: t.exception())   # never unraised
+        warmup.add_done_callback(lambda t: t.cancelled() or t.exception())   # never unraised
         try:
             async with stdio_server() as (read_stream, write_stream):
                 await server.run(
